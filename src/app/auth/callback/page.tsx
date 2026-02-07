@@ -22,8 +22,13 @@ export default function OAuthCallbackPage() {
       }
 
       try {
+        // 1️⃣ Troca exchange_code por JWT
         await oauthExchange("google", exchangeCode);
+
+        // 2️⃣ Confirma identidade REAL
         await reloadMe();
+
+        // 3️⃣ ENTRA NUMA ROTA PROTEGIDA
         router.replace("/dashboard");
       } catch {
         router.replace("/login");

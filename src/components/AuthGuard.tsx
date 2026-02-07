@@ -1,26 +1,23 @@
-// /var/www/GSA/animal/frontend/src/components/AuthGuard.tsx
+// src/components/AuthGuard.tsx
 
 "use client";
 
-import { ReactNode, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { ReactNode } from "react";
 import { useMe } from "@/components/MeContext";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { me, loading } = useMe();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && me === null) {
-      router.replace("/login");
-    }
-  }, [me, loading, router]);
+  // Enquanto está carregando, bloqueia tudo
+  if (loading) {
+    return null;
+  }
 
-  if (loading || me === null) {
+  // Não autenticado → NÃO renderiza, mas também NÃO redireciona
+  if (me === null) {
     return null;
   }
 
   return <>{children}</>;
 }
-
 

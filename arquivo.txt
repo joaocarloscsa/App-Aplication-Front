@@ -1,0 +1,604 @@
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/layout.tsx =====
+// /var/www/GSA/animal/frontend/src/app/layout.tsx
+
+import "./globals.css";
+import { ClientProviders } from "./ClientProviders";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="pt">
+      <body>
+        <ClientProviders>{children}</ClientProviders>
+      </body>
+    </html>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/layout.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/layout.tsx =====
+import { ReactNode } from "react";
+import { AuthGuard } from "@/components/AuthGuard";
+import TopBar from "@/components/layout/TopBar";
+import { DashboardOverlayProvider } from "@/components/dashboard/DashboardOverlayContext";
+
+export default function ProtectedLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <AuthGuard>
+      <DashboardOverlayProvider>
+        <TopBar />
+        <main>{children}</main>
+      </DashboardOverlayProvider>
+    </AuthGuard>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/layout.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/ClientProviders.tsx =====
+// /var/www/GSA/animal/frontend/src/app/ClientProviders.tsx
+
+"use client";
+
+import { ReactNode } from "react";
+import { MeProvider } from "@/components/MeContext";
+
+export function ClientProviders({ children }: { children: ReactNode }) {
+  return <MeProvider>{children}</MeProvider>;
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/ClientProviders.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/page.tsx =====
+import {
+  UserCard,
+  AlertsCard,
+  StorageCard,
+  AnimalsCard,
+} from "@/components/dashboard";
+
+export default function DashboardPage() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <UserCard />
+      <AlertsCard />
+      <StorageCard />
+      <AnimalsCard />
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/page.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/StorageCard.tsx =====
+"use client";
+
+import { useMe } from "@/components/MeContext";
+import { Card } from "./Card";
+import { useDashboardOverlay } from "./DashboardOverlayContext";
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  const decimals = i === 0 ? 0 : v < 10 ? 2 : 1;
+  return `${v.toFixed(decimals)} ${units[i]}`;
+}
+
+export function StorageCard() {
+  const { me } = useMe();
+  const { openOverlay } = useDashboardOverlay();
+
+  const storage = me?.storage;
+  const totalUsed = storage?.total_used_bytes ?? 0;
+
+  return (
+    <Card title="Storage">
+      <button
+        type="button"
+        onClick={() => openOverlay("storage")}
+        className="w-full text-left"
+      >
+        <p className="text-2xl font-bold text-zinc-900">
+          {formatBytes(totalUsed)}
+        </p>
+        <p className="text-sm text-zinc-500">
+          usado no total
+        </p>
+      </button>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/StorageCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AlertsCard.tsx =====
+"use client";
+
+import { Card } from "./Card";
+import { useMe } from "@/components/MeContext";
+
+export function AlertsCard() {
+  const { me } = useMe();
+  const count = me?.alerts.pending.length ?? 0;
+
+  return (
+    <Card title="Alertas">
+      <p
+        className={`text-2xl font-bold ${
+          count > 0 ? "text-red-600" : "text-green-600"
+        }`}
+      >
+        {count}
+      </p>
+      <p className="text-sm text-zinc-500">
+        pendentes
+      </p>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AlertsCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AnimalsCard.tsx =====
+"use client";
+
+import { Card } from "./Card";
+import { useMe } from "@/components/MeContext";
+
+export function AnimalsCard() {
+  const { me } = useMe();
+  const count = me?.storage.by_animal?.length ?? 0;
+
+  return (
+    <Card title="Animais">
+      <p className="text-2xl font-bold">{count}</p>
+      <p className="text-sm text-zinc-500">
+        cadastrados
+      </p>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AnimalsCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx =====
+"use client";
+
+import { useMe } from "@/components/MeContext";
+import { Card } from "./Card";
+
+export function UserCard() {
+  const { me } = useMe();
+
+  if (!me) return null;
+
+  return (
+    <Card title="Usuário">
+      <p className="text-sm font-semibold text-zinc-900">
+        {me.user.email}
+      </p>
+      <p className="text-xs text-zinc-500">
+        conta principal
+      </p>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/Card.tsx =====
+import { ReactNode } from "react";
+
+export function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <h3 className="mb-2 text-sm font-semibold text-zinc-600">
+        {title}
+      </h3>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/Card.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/DashboardOverlayContext.tsx =====
+"use client";
+
+import { createContext, useContext, useState, ReactNode } from "react";
+
+type OverlayType = "storage" | "alerts" | null;
+
+type DashboardOverlayContextValue = {
+  activeOverlay: OverlayType;
+  openOverlay: (overlay: OverlayType) => void;
+  closeOverlay: () => void;
+};
+
+const DashboardOverlayContext =
+  createContext<DashboardOverlayContextValue | undefined>(undefined);
+
+export function DashboardOverlayProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [activeOverlay, setActiveOverlay] = useState<OverlayType>(null);
+
+  function openOverlay(overlay: OverlayType) {
+    setActiveOverlay(overlay);
+  }
+
+  function closeOverlay() {
+    setActiveOverlay(null);
+  }
+
+  return (
+    <DashboardOverlayContext.Provider
+      value={{ activeOverlay, openOverlay, closeOverlay }}
+    >
+      {children}
+    </DashboardOverlayContext.Provider>
+  );
+}
+
+export function useDashboardOverlay() {
+  const ctx = useContext(DashboardOverlayContext);
+  if (!ctx) {
+    throw new Error(
+      "useDashboardOverlay must be used inside DashboardOverlayProvider"
+    );
+  }
+  return ctx;
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/DashboardOverlayContext.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AlertsCard.tsx =====
+"use client";
+
+import { Card } from "./Card";
+import { useMe } from "@/components/MeContext";
+
+export function AlertsCard() {
+  const { me } = useMe();
+  const count = me?.alerts.pending.length ?? 0;
+
+  return (
+    <Card title="Alertas">
+      <p
+        className={`text-2xl font-bold ${
+          count > 0 ? "text-red-600" : "text-green-600"
+        }`}
+      >
+        {count}
+      </p>
+      <p className="text-sm text-zinc-500">
+        pendentes
+      </p>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AlertsCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AnimalsCard.tsx =====
+"use client";
+
+import { Card } from "./Card";
+import { useMe } from "@/components/MeContext";
+
+export function AnimalsCard() {
+  const { me } = useMe();
+  const count = me?.storage.by_animal?.length ?? 0;
+
+  return (
+    <Card title="Animais">
+      <p className="text-2xl font-bold">{count}</p>
+      <p className="text-sm text-zinc-500">
+        cadastrados
+      </p>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/AnimalsCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/Card.tsx =====
+import { ReactNode } from "react";
+
+export function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <h3 className="mb-2 text-sm font-semibold text-zinc-600">
+        {title}
+      </h3>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/Card.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/DashboardOverlayContext.tsx =====
+"use client";
+
+import { createContext, useContext, useState, ReactNode } from "react";
+
+type OverlayType = "storage" | "alerts" | null;
+
+type DashboardOverlayContextValue = {
+  activeOverlay: OverlayType;
+  openOverlay: (overlay: OverlayType) => void;
+  closeOverlay: () => void;
+};
+
+const DashboardOverlayContext =
+  createContext<DashboardOverlayContextValue | undefined>(undefined);
+
+export function DashboardOverlayProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [activeOverlay, setActiveOverlay] = useState<OverlayType>(null);
+
+  function openOverlay(overlay: OverlayType) {
+    setActiveOverlay(overlay);
+  }
+
+  function closeOverlay() {
+    setActiveOverlay(null);
+  }
+
+  return (
+    <DashboardOverlayContext.Provider
+      value={{ activeOverlay, openOverlay, closeOverlay }}
+    >
+      {children}
+    </DashboardOverlayContext.Provider>
+  );
+}
+
+export function useDashboardOverlay() {
+  const ctx = useContext(DashboardOverlayContext);
+  if (!ctx) {
+    throw new Error(
+      "useDashboardOverlay must be used inside DashboardOverlayProvider"
+    );
+  }
+  return ctx;
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/DashboardOverlayContext.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/index.ts =====
+export { UserCard } from "./UserCard";
+export { AlertsCard } from "./AlertsCard";
+export { StorageCard } from "./StorageCard";
+export { AnimalsCard } from "./AnimalsCard";
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/index.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/StorageCard.tsx =====
+"use client";
+
+import { useMe } from "@/components/MeContext";
+import { Card } from "./Card";
+import { useDashboardOverlay } from "./DashboardOverlayContext";
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  const decimals = i === 0 ? 0 : v < 10 ? 2 : 1;
+  return `${v.toFixed(decimals)} ${units[i]}`;
+}
+
+export function StorageCard() {
+  const { me } = useMe();
+  const { openOverlay } = useDashboardOverlay();
+
+  const storage = me?.storage;
+  const totalUsed = storage?.total_used_bytes ?? 0;
+
+  return (
+    <Card title="Storage">
+      <button
+        type="button"
+        onClick={() => openOverlay("storage")}
+        className="w-full text-left"
+      >
+        <p className="text-2xl font-bold text-zinc-900">
+          {formatBytes(totalUsed)}
+        </p>
+        <p className="text-sm text-zinc-500">
+          usado no total
+        </p>
+      </button>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/StorageCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx =====
+"use client";
+
+import { useMe } from "@/components/MeContext";
+import { Card } from "./Card";
+
+export function UserCard() {
+  const { me } = useMe();
+
+  if (!me) return null;
+
+  return (
+    <Card title="Usuário">
+      <p className="text-sm font-semibold text-zinc-900">
+        {me.user.email}
+      </p>
+      <p className="text-xs text-zinc-500">
+        conta principal
+      </p>
+    </Card>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/MeContext.tsx =====
+// /var/www/GSA/animal/frontend/src/components/MeContext.tsx
+
+"use client";
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { fetchMe, MeResponse } from "@/services/me";
+import { clearAccessToken } from "@/stores/auth";
+
+type MeContextValue = {
+  me: MeResponse | null;
+  loading: boolean;
+  reloadMe: () => Promise<void>;
+  resetMe: () => void;
+};
+
+const MeContext = createContext<MeContextValue | undefined>(undefined);
+
+export function MeProvider({ children }: { children: ReactNode }) {
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function loadMe() {
+    setLoading(true);
+    try {
+      const data = await fetchMe();
+      setMe(data);
+    } catch {
+      setMe(null);
+      clearAccessToken();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetMe() {
+    setMe(null);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadMe();
+  }, []);
+
+  return (
+    <MeContext.Provider
+      value={{
+        me,
+        loading,
+        reloadMe: loadMe,
+        resetMe,
+      }}
+    >
+      {children}
+    </MeContext.Provider>
+  );
+}
+
+export function useMe(): MeContextValue {
+  const ctx = useContext(MeContext);
+  if (!ctx) {
+    throw new Error("useMe must be used inside MeProvider");
+  }
+  return ctx;
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/MeContext.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/AuthGuard.tsx =====
+"use client";
+
+import { ReactNode, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useMe } from "@/components/MeContext";
+
+export function AuthGuard({ children }: { children: ReactNode }) {
+  const { me, loading } = useMe();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && me === null) {
+      router.replace("/login");
+    }
+  }, [loading, me, router]);
+
+  // ⛔ enquanto está carregando, NÃO REDIRECIONA
+  if (loading) {
+    return null; // ou um skeleton
+  }
+
+  // ⛔ só aqui decide que não pode
+  if (me === null) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/AuthGuard.tsx =====

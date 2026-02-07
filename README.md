@@ -1,36 +1,158 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Perfeito. **Checkpoint criado. Você está seguro agora.**
+Esse commit é a **âncora** que impede regressão psicológica e técnica.
 
-## Getting Started
+Agora vamos seguir **com cabeça fria**.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## PRÓXIMO PASSO SEGURO (SEM TOCAR EM AUTH)
+
+### Objetivo
+
+Preparar o projeto para:
+
+* versionamento público (GitHub)
+* onboarding de outra pessoa
+* retomada futura sem medo
+
+Nada funcional muda. **Zero risco.**
+
+---
+
+## ETAPA 1 — README TÉCNICO MÍNIMO (OBRIGATÓRIO)
+
+Vamos criar um README que deixe **claríssimo**:
+
+* como rodar
+* como NÃO quebrar auth
+* qual é o ponto de entrada conceitual
+
+### Arquivo a criar
+
+```
+/var/www/GSA/animal/frontend/README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Conteúdo (copiar exatamente)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+````markdown
+# GSA Animal — Frontend
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Frontend oficial da plataforma **GSA Animal**, construído com **Next.js (App Router)**.
 
-## Learn More
+Este projeto utiliza **JWT com refresh token em cookie HttpOnly** e governa autenticação **exclusivamente** via `/api/v1/me`.
 
-To learn more about Next.js, take a look at the following resources:
+⚠️ **Não trate este frontend como um projeto Next genérico.**
+Existem regras conceituais que, se violadas, quebram autenticação.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Stack
 
-## Deploy on Vercel
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- Fetch nativo
+- JWT (Access em memória + Refresh em cookie)
+- React Context (estado global de auth)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Rodar localmente
+
+### Requisitos
+- Node.js ≥ 20
+- Backend GSA Animal rodando em HTTPS
+
+### Variáveis de ambiente
+
+Crie `.env.local`:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://gsa-animal.local
+NEXT_PUBLIC_OAUTH_DEV_BASE_URL=https://gsa-animal.local
+````
+
+### Rodar
+
+```bash
+npm install
+npm run dev
+```
+
+Acesse:
+
+```
+https://gsa-animal.local/login
+```
+
+---
+
+## Autenticação (LEIA ANTES DE MEXER)
+
+* `POST /api/login` **não confirma login**
+* Autenticação confirmada **SOMENTE** via `GET /api/v1/me`
+* O estado global é governado por `MeContext`
+* Rotas protegidas usam `AuthGuard`
+* Access token:
+
+  * fica em memória
+  * vai no header `Authorization`
+* Refresh token:
+
+  * fica em cookie HttpOnly
+  * nunca é lido no JS
+  * só é usado via `/api/token/refresh`
+
+📌 **Leia antes de alterar qualquer coisa:**
+
+```
+frontend/00_docs/FRONTEND_AUTH_POST_MORTEM.md
+```
+
+---
+
+## Estrutura relevante
+
+```
+src/
+├── app/
+│   ├── login/
+│   ├── auth/callback/
+│   └── (protected)/
+├── components/
+├── services/
+├── stores/
+└── lib/
+```
+
+---
+
+## Regra final
+
+> Se `/api/v1/me` não confirmou, o usuário NÃO está logado.
+
+Essa regra evita 90% dos bugs.
+
+````
+
+---
+
+## ETAPA 2 — COMMIT DO README
+
+Depois de salvar o arquivo:
+
+```bash
+git add README.md
+git commit -m "docs: add canonical frontend README with auth rules"
+````
+
+---
+
+## ETAPA 3 — PARAR
+
+Depois disso: **pare**.
+Não mexa em auth, não mexa em HTTP, não mexa em env.
+
+Esse é o momento correto de **descansar**.
+

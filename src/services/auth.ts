@@ -10,7 +10,7 @@ type LoginResponse = {
 };
 
 type OAuthExchangeResponse = {
-  access_token: string;
+  token: string;
 };
 
 export async function login(email: string, password: string): Promise<void> {
@@ -20,7 +20,7 @@ export async function login(email: string, password: string): Promise<void> {
       email,
       password,
     },
-    credentials: "include", // OBRIGATÓRIO
+    credentials: "include",
   });
 
   setAccessToken(response.access_token);
@@ -42,17 +42,10 @@ export async function oauthExchange(
     }
   );
 
-  setAccessToken(response.access_token);
+  setAccessToken(response.token);
 }
 
-export async function logout(): Promise<void> {
-  try {
-    await http("/api/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-  } finally {
-    clearAccessToken();
-  }
+export function logout(): void {
+  clearAccessToken();
 }
 
