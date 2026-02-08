@@ -13,10 +13,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const PASSWORD_HINT ="A senha deve ter entre 5 e 12 caracteres e conter letras maiúsculas, letras minúsculas e números.";
+
 
   useEffect(() => {
-    console.log(!loading && me !== null)
-    console.log(loading, me )
     if (!loading && me !== null) {
       router.replace("/dashboard");
     }
@@ -95,14 +95,15 @@ export default function LoginPage() {
                   required
                   className="h-11 w-full rounded-xl border px-3 text-sm"
                 />
+                  {error && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 space-y-1">
+                      <div>{error}</div>
+                      <div className="text-xs text-zinc-600">
+                        {PASSWORD_HINT}
+                      </div>
+                    </div>
+                  )}
               </div>
-
-              {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
               <button
                 type="submit"
                 disabled={submitting}
