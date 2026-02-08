@@ -13,10 +13,9 @@ export type MeResponse = {
 
 export async function fetchMe(): Promise<MeResponse> {
   return http<MeResponse>("/api/v1/me", {
-    method: "GET",
-    // ⚠️ /me PRECISA permitir cookies para que o refresh funcione
-    // caso o access token esteja expirado
-    credentials: "include",
-  });
+  method: "GET",
+  credentials: "include",
+});
+
 }
 

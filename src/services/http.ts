@@ -61,7 +61,7 @@ export async function http<T>(
       ...(options.headers ?? {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
-    credentials: "include",
+    credentials: options.credentials ?? "include", // ✅ respeita o caller
   });
 
   if (response.status === 401 && retry) {

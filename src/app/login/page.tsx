@@ -1,5 +1,3 @@
-// /var/www/GSA/animal/frontend/src/app/login/page.tsx
-
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -17,6 +15,8 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    console.log(!loading && me !== null)
+    console.log(loading, me )
     if (!loading && me !== null) {
       router.replace("/dashboard");
     }
@@ -31,7 +31,15 @@ export default function LoginPage() {
     try {
       await login(email, password);
       await reloadMe();
-    } catch {
+} catch (err: any) {
+  const apiMessage = err?.message;
+
+  if (apiMessage === "email_not_verified") {
+    router.push(
+      `/email-not-verified?email=${encodeURIComponent(email)}`
+    );
+    return;
+  }
       setError("E-mail ou senha inválidos");
     } finally {
       setSubmitting(false);
@@ -50,52 +58,42 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-6 py-10">
-        <div className="w-full max-w-md">
-          <div className="mb-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50">
-                <span className="text-sm font-semibold tracking-tight">
-                  GSA
-                </span>
-              </div>
-              <div>
-                <div className="text-lg font-semibold leading-6">
-                  GSA Animal
-                </div>
-                <div className="text-sm text-zinc-600">
-                  Entre para continuar
-                </div>
-              </div>
+        <div className="w-full max-w-md space-y-6">
+
+          {/* HEADER */}
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 text-sm font-semibold">
+              GSA
+            </div>
+            <div>
+              <div className="text-lg font-semibold">GSA Animal</div>
+              <div className="text-sm text-zinc-600">Acesso à plataforma</div>
             </div>
           </div>
 
+          {/* LOGIN CARD */}
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
             <form onSubmit={handleSubmit} className="space-y-4">
+
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-800">
-                  E-mail
-                </label>
+                <label className="block text-sm font-medium">E-mail</label>
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
+                  onChange={e => setEmail(e.target.value)}
                   required
-                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-900"
+                  className="h-11 w-full rounded-xl border px-3 text-sm"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-800">
-                  Senha
-                </label>
+                <label className="block text-sm font-medium">Senha</label>
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                  onChange={e => setPassword(e.target.value)}
                   required
-                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-900"
+                  className="h-11 w-full rounded-xl border px-3 text-sm"
                 />
               </div>
 
@@ -108,26 +106,34 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-zinc-50 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70"
+                className="h-11 w-full rounded-xl bg-zinc-900 text-white"
               >
                 {submitting ? "Entrando..." : "Entrar"}
               </button>
             </form>
-
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white text-sm font-semibold hover:bg-zinc-50"
-              >
-                <img src="/google.svg" className="h-4 w-4" />
-                Entrar com Google
-              </button>
-            </div>
           </div>
+
+          {/* AUX */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/forgot-password")}
+              className="rounded-xl border p-4 text-left text-sm"
+            >
+              Esqueci a senha
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/register")}
+              className="rounded-xl border p-4 text-left text-sm"
+            >
+              Criar conta
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
   );
 }
-
