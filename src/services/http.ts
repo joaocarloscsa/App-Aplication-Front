@@ -30,7 +30,7 @@ export class HttpError extends Error {
 async function refreshToken(): Promise<string | null> {
   const response = await fetch(`${ENV.API_BASE_URL}/api/token/refresh`, {
     method: "POST",
-    credentials: "include", // refresh token via cookie
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -39,8 +39,6 @@ async function refreshToken(): Promise<string | null> {
   }
 
   const data = await response.json();
-
-  // backend DEVE devolver APENAS access token
   setAccessToken(data.token);
 
   return data.token;
@@ -52,16 +50,27 @@ export async function http<T>(
   retry = true
 ): Promise<T> {
   const token = getAccessToken();
+  const isFormData = options.body instanceof FormData;
+
+  let body: BodyInit | undefined;
+
+  if (options.body !== undefined) {
+    if (isFormData) {
+      body = options.body;
+    } else {
+      body = JSON.stringify(options.body);
+    }
+  }
 
   const response = await fetch(`${ENV.API_BASE_URL}${path}`, {
     method: options.method ?? "GET",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    credentials: options.credentials ?? "include", // ✅ respeita o caller
+    body,
+    credentials: options.credentials ?? "include",
   });
 
   if (response.status === 401 && retry) {
@@ -88,4 +97,3 @@ export async function http<T>(
 
   return (await response.json()) as T;
 }
-

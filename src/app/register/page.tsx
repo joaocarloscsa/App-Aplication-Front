@@ -88,7 +88,7 @@ export default function RegisterPage() {
           </div>
           <h1 className="text-xl font-semibold text-zinc-900">Criar conta</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Cadastro rápido para começar a usar a plataforma
+            Registro rápido para começar a usar a plataforma
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-// /var/www/GSA/animal/frontend/src/components/layout/TopBar.tsx
+// src/components/layout/TopBar.tsx
 
 "use client";
 
@@ -7,6 +7,7 @@ import { useMe } from "@/components/MeContext";
 import { logout } from "@/services/auth";
 import { useRouter } from "next/navigation";
 import { useDashboardOverlay } from "@/components/dashboard/DashboardOverlayContext";
+import { SideMenu } from "@/components/layout/SideMenu";
 
 function getPersonDisplayName(me: any): string {
   const email: string = me?.user?.email ?? "";
@@ -16,12 +17,9 @@ function getPersonDisplayName(me: any): string {
 }
 
 function countAlerts(me: any): number {
-  const decisions =
-    me?.alerts?.decisions?.pending?.length ?? 0;
-
+  const decisions = me?.alerts?.decisions?.pending?.length ?? 0;
   const communications =
     me?.alerts?.communications?.unread?.length ?? 0;
-
   return decisions + communications;
 }
 
@@ -72,8 +70,13 @@ export default function TopBar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        {/* LEFT */}
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4">
+        {/* Mobile menu */}
+        <div className="md:hidden">
+          <SideMenu mobile />
+        </div>
+
+        {/* Logo / title */}
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-xs font-semibold text-white">
             GSA
@@ -94,9 +97,7 @@ export default function TopBar() {
                 <span>ID: {personId}</span>
                 <span>📋</span>
                 {copied && (
-                  <span className="text-green-600">
-                    copiado
-                  </span>
+                  <span className="text-green-600">copiado</span>
                 )}
               </button>
             )}
@@ -105,9 +106,8 @@ export default function TopBar() {
 
         <div className="flex-1" />
 
-        {/* RIGHT */}
+        {/* Right actions */}
         <div className="flex items-center gap-4">
-          {/* Alerts */}
           <button
             type="button"
             onClick={() => openOverlay("alerts")}
@@ -122,7 +122,6 @@ export default function TopBar() {
             )}
           </button>
 
-          {/* User menu */}
           <div className="relative">
             <button
               type="button"
@@ -162,3 +161,4 @@ export default function TopBar() {
     </header>
   );
 }
+
