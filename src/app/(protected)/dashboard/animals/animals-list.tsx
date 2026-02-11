@@ -1,10 +1,13 @@
-// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/animals-list.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchAnimals, AnimalListItem } from "@/services/animals";
+import { AnimalPhoto } from "@/components/animals/AnimalPhoto";
+
+import { CopyId } from "@/components/dashboard/CopyId";
+
+
 
 export default function AnimalsList() {
   const [animals, setAnimals] = useState<AnimalListItem[]>([]);
@@ -57,27 +60,52 @@ export default function AnimalsList() {
           className="flex items-center justify-between gap-3 px-4 py-3"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-full bg-zinc-200 overflow-hidden">
-              {a.photo?.url && (
-                <img
-                  src={a.photo.url}
+            {/* FOTO DO ANIMAL — FLUXO CANÔNICO */}
+              <div className="h-10 w-10 shrink-0">
+                <AnimalPhoto
+                  size="sm"
                   alt={a.call_name ?? a.public_id}
-                  className="h-full w-full object-cover"
+                  photo={{
+                    read_url: `/api/v1/animals/${a.public_id}/photo/read`,
+                  }}
                 />
-              )}
-            </div>
+              </div>
 
-            <div className="min-w-0">
-              <div className="font-semibold truncate">
-                {a.call_name ?? "Sem nome"}
-              </div>
-              <div className="text-xs text-zinc-500 flex gap-2">
-                <span className="font-mono">{a.public_id}</span>
-                {a.type && (
-                  <span className="uppercase">{a.type}</span>
-                )}
-              </div>
-            </div>
+
+                  <div className="min-w-0 space-y-0.5">
+                    {/* Linha 1 — Nome + Tipo + Papel */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="font-semibold truncate">
+                        {a.call_name ?? "Sem nome"}
+                      </div>
+
+                      {a.type && (
+                        <span className="text-xs font-medium uppercase text-zinc-500">
+                          {a.type}
+                        </span>
+                      )}
+
+                      {a.my_role === "invited_tutor" && (
+                        <span
+                          title="Você é tutor convidado"
+                          className="text-xs text-zinc-400 cursor-default"
+                        >
+                          🤝
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Linha 2 — ID + copiar */}
+                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                      <span className="font-mono truncate">{a.public_id}</span>
+                      <CopyId id={a.public_id} />
+                    </div>
+                  </div>
+
+
+
+
+
           </div>
 
           <Link
@@ -91,3 +119,4 @@ export default function AnimalsList() {
     </ul>
   );
 }
+

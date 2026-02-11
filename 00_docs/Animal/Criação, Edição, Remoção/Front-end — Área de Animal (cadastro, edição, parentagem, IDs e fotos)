@@ -1,0 +1,352 @@
+# Front-end — Área de Animal (cadastro, edição, parentagem, IDs e fotos)
+
+## 1) Escopo e objetivo
+
+Este documento descreve **como funciona (de fato)** a área de Animal no front-end da aplicação GSA ANIMAL:
+
+* Rotas e arquivos envolvidos
+* Fluxo de leitura e update do Animal
+* Comportamento do formulário “Dados básicos”
+* Comportamento de “Pai/Mãe” (parentagem) com **snapshot vs vínculo interno**
+* Padrão de exibição e cópia de IDs (Copy ID)
+* Upload de foto do Animal (quadrada) com crop
+* Pontos críticos que **não podem regredir** (scroll/topo, reload indesejado, botões “Remover”, snapshot)
+
+Tudo aqui é para permitir que outro dev mexa nessa área **sem reintroduzir regressões**.
+
+---
+
+## 2) Rotas e páginas (App Router)
+
+### Página do animal (edição)
+
+* Arquivo:
+
+  * `src/app/(protected)/dashboard/animals/[animalId]/page.tsx`
+* Responsabilidade:
+
+  * Ler `animalId` via `useParams` (App Router) ([nextjs.org][1])
+  * Buscar o animal via `getAnimal(publicId)`
+  * Renderizar topo (foto + identidade)
+  * Renderizar:
+
+    * `AnimalBasicForm` (dados básicos)
+    * `AnimalParentsForm` (pai/mãe)
+
+### Convenções do Next.js App Router usadas aqui
+
+* Estrutura de rotas por sistema de arquivos ([nextjs.org][2])
+* Hooks do App Router para params e querystring ([nextjs.org][1])
+
+---
+
+## 3) Serviços usados (HTTP / Animals)
+
+### HTTP base
+
+* Arquivo:
+
+  * `src/services/http.ts`
+* Padrão:
+
+  * Bearer token no header quando existe (`Authorization: Bearer <token>`)
+  * `credentials: "include"` por default
+  * Refresh automático no `401` via `/api/token/refresh`
+
+#### Upload multipart/form-data (FormData)
+
+Para upload (foto/arquivos):
+
+* **Não** setar `Content-Type: multipart/form-data` manualmente.
+* O browser precisa inserir o `boundary` automaticamente; se você setar o header na mão, quebra o upload. ([MDN Web Docs][3])
+
+---
+
+## 4) Contrato de parentagem (Pai/Mãe) — regra de domínio
+
+Este front-end segue o contrato do backend descrito no documento de integração (parentagem e tutoria). O comportamento é:
+
+### 4.1 Pai/Mãe interno (type = internal)
+
+* Existe vínculo real com outro Animal
+* Dados exibidos vêm do snapshot (e/ou do animal vinculado), mas:
+
+  * **Campos não são editáveis**
+  * **Apenas `notes` é editável** (observação local do tutor/admin)
+* Se o front enviar campos (call_name, microchip, etc.):
+
+  * backend **ignora** tudo, exceto `notes`
+  * responde **200 OK**
+* O front **não valida domínio**: apenas exibe conforme `type`.
+
+### 4.2 Pai/Mãe externo (type = external ou ausência de vínculo)
+
+* Não existe vínculo com outro Animal
+* Snapshot é independente
+* Todos os campos são editáveis
+
+### 4.3 Perda de acesso ao pai/mãe interno
+
+Quando o usuário perde acesso ao animal pai/mãe:
+
+* vínculo interno é removido pelo backend
+* snapshot permanece
+* campos voltam a ser editáveis
+* **UI não pode manter botão “Remover vínculo interno”** se não existe vínculo
+
+---
+
+## 5) Componentes — Parentagem
+
+### 5.1 Formulário pai/mãe
+
+* Arquivo:
+
+  * `src/components/animals/AnimalParentsForm.tsx`
+
+Responsabilidades principais:
+
+* Normalizar `animal.father` e `animal.mother` em uma estrutura consistente
+* Manter drafts locais por pai/mãe
+* Exibir:
+
+  * Autocomplete (vínculo interno por `public_id`)
+  * Separador “ou”
+  * Form completo de snapshot (externo)
+* Remover pai/mãe:
+
+  * Envia `{ action: "remove" }` no PATCH de parents
+  * Deve ser idempotente
+  * **Não pode causar jump para topo** (não pode disparar submit involuntário, nem navegação)
+
+**Regra crítica de UI (não regredir):**
+
+* Ao salvar/remover, a página **não pode** “subir para o topo”.
+* Isso geralmente acontece quando:
+
+  * botão vira submit por estar dentro de `<form>` sem `type="button"`
+  * ou existe navegação/refresh de rota indevido
+* O padrão correto é manter estado local + mostrar feedback sem reload.
+
+### 5.2 Autocomplete de pai/mãe (vínculo interno)
+
+* Arquivo:
+
+  * `src/components/animals/AnimalParentAutocomplete.tsx`
+
+Responsabilidades:
+
+* Buscar animais (`searchAnimals`)
+* Ao selecionar:
+
+  * Fazer PATCH definindo vínculo interno:
+
+    * `updateAnimalParents(animalId, { [kind]: { public_id } })`
+  * Atualizar UI do pai/mãe via callback `onSaved(...)`
+
+**Regra crítica de domínio (não regredir):**
+
+* O snapshot **não deve copiar `notes` do animal pai/mãe**.
+* `notes` é “observação do vínculo” (tutor/admin) e é local.
+* Se a UI preencher `notes` vindo do pai/mãe, vira um bug de semântica.
+
+**Portanto, após selecionar pai/mãe:**
+
+* snapshot pode preencher campos (nome, microchip, registry, raça)
+* `notes` deve permanecer:
+
+  * o que já existia no snapshot daquele vínculo, ou
+  * vazio, se não existia
+* Nunca puxar `notes` do animal pai/mãe.
+
+---
+
+## 6) Formulário “Dados básicos” do Animal
+
+* Arquivo:
+
+  * `src/components/animals/AnimalBasicForm.tsx`
+
+Regras:
+
+* Deve cobrir os campos retornados pelo backend na entidade Animal que são editáveis:
+
+  * call_name
+  * official_name
+  * provisional_name (não pode faltar)
+  * type
+  * sex
+  * breed
+  * coat_color
+  * coat_type
+  * birth_date
+  * microchip_number
+  * registry_issuer
+  * registry_number
+  * notes
+
+Campos informativos (não editáveis, mas visíveis):
+
+* created_at
+* updated_at
+
+Observação:
+
+* created_at/updated_at não devem ser enviados no PATCH; são apenas leitura.
+
+---
+
+## 7) Padrão de ID + “Copiar ID”
+
+### Requisito de UX
+
+* Todo lugar que exibir `public_id` (Animal, Pessoa, etc.) deve ter botão “Copiar ID” ao lado.
+
+### Implementação
+
+* Componente existente (base):
+
+  * `src/components/dashboard/CopyId.tsx`
+
+Regras que já foram alinhadas:
+
+* Botão pequeno, explícito (“Copiar ID”), com “mãozinha” no hover
+* Não depender de “clicar no texto” para copiar
+* Reuso em toda UI
+
+---
+
+## 8) Foto do Animal — upload + crop (quadrada)
+
+### Objetivo
+
+* Foto de Animal é **quadrada** (melhor para visualizar o corpo do animal; circular corta partes relevantes).
+* Deve existir um bloco reutilizável (foi criado e usado no topo da página do animal).
+
+### Upload
+
+* Endpoint:
+
+  * `POST /api/v1/animals/{publicId}/photo`
+  * multipart/form-data com `file=<imagem>`
+* Retorno:
+
+  * `photo.read_url` (rota de leitura autenticada ou intermediária)
+  * Depois, ao buscar o Animal novamente (`GET /api/v1/animals/{publicId}`), `photo` aparece no payload.
+
+### Leitura (ponto crítico)
+
+**Não carregar imagem diretamente de um endpoint que exige Authorization header**, porque `<img src="...">` não envia header Authorization.
+
+Em ambiente com front em `127.0.0.1:3000` e API em `127.0.0.1:8000`:
+
+* O browser trata como cross-origin.
+* Requests de `<img>` não incluem o Bearer token.
+* Cookies de sessão podem não ser enviados dependendo da política/cors/samesite.
+  Resultado típico: `401 Unauthorized` ao tentar carregar uma rota protegida via `<img>`, mesmo estando “logado” no app.
+
+Portanto, o padrão correto é:
+
+1. Chamar uma rota de “read” que **retorna URL assinada do S3** (sem auth do app na URL final), e então:
+2. Renderizar a imagem usando a URL assinada (S3), não o endpoint interno.
+
+Esse padrão é compatível com o modelo do `react-easy-crop` (opera em cima de uma imagem carregada via URL). ([valentinh.github.io][4])
+
+### Crop (mínimo viável)
+
+Biblioteca escolhida:
+
+* `react-easy-crop` ([valentinh.github.io][4])
+
+Regras:
+
+* Abrir modal após escolher arquivo local
+* Permitir:
+
+  * zoom
+  * crop quadrado (aspect = 1)
+* Ao confirmar:
+
+  * gerar um novo File (imagem recortada)
+  * enviar via `FormData` para o endpoint de upload
+
+---
+
+## 9) Foto da Pessoa (circular) — nota de decisão de UX
+
+Decisão de UX:
+
+* Foto da Pessoa é circular (padrão de identidade)
+* **Não deve existir botão de alterar foto no card do dashboard**.
+
+  * Dashboard deve apenas exibir a foto/identidade.
+  * Alteração de foto e dados (telefone/endereço) será feita numa futura tela “Perfil do Usuário”.
+
+Nota técnica:
+
+* Evitar `<button>` dentro de `<button>` para não quebrar HTML/hidratação (Next/React acusa). ([Rocket Validator][5])
+
+---
+
+## 10) Checklist anti-regressão (antes de dar PR como “ok”)
+
+### Animal page
+
+* [ ] Topo mostra foto quadrada + nome + ID com botão “Copiar ID” ao lado do ID
+* [ ] Não existe duplicação de nome/ID em duas áreas diferentes
+* [ ] Botões não causam jump para topo (salvar/remover)
+
+### Parents form
+
+* [ ] “Remover” só aparece quando faz sentido (não manter quando vínculo interno não existe)
+* [ ] Selecionar pai/mãe via autocomplete não preenche `notes` do pai/mãe
+* [ ] `notes` é local do vínculo, não “herdado”
+* [ ] Salvar não causa reload nem scroll-to-top
+* [ ] Feedback de “salvo” é visível e não desloca layout (reservar espaço)
+
+### Upload / Foto
+
+* [ ] Upload usa `FormData` sem setar `Content-Type` manualmente ([MDN Web Docs][3])
+* [ ] Imagem exibida via URL assinada (não endpoint protegido que exija Authorization header)
+
+---
+
+## 11) Arquivos principais (referência rápida)
+
+* Página do animal:
+
+  * `src/app/(protected)/dashboard/animals/[animalId]/page.tsx`
+
+* Dados básicos:
+
+  * `src/components/animals/AnimalBasicForm.tsx`
+
+* Parentagem:
+
+  * `src/components/animals/AnimalParentsForm.tsx`
+  * `src/components/animals/AnimalParentAutocomplete.tsx`
+
+* Serviços:
+
+  * `src/services/http.ts`
+  * `src/services/animals.ts`
+
+* ID copy:
+
+  * `src/components/dashboard/CopyId.tsx`
+
+* Foto Animal:
+
+  * `src/components/animals/AnimalPhotoBlock.tsx`
+  * `src/components/common/ImageCropModal.tsx` (crop)
+  * `src/components/common/PhotoBlockBase.tsx` (base reutilizável, quando aplicável)
+
+---
+
+Fim do documento
+
+[1]: https://nextjs.org/docs/app/api-reference/functions/use-params?utm_source=chatgpt.com "Functions: useParams | Next.js"
+[2]: https://nextjs.org/docs/app/getting-started/layouts-and-pages?utm_source=chatgpt.com "Getting Started: Layouts and Pages - Next.js"
+[3]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Type?utm_source=chatgpt.com "Content-Type header - HTTP - MDN Web Docs - Mozilla"
+[4]: https://valentinh.github.io/react-easy-crop/?utm_source=chatgpt.com "react-easy-crop"
+[5]: https://rocketvalidator.com/html-validation/the-element-button-must-not-appear-as-a-descendant-of-the-a-element?utm_source=chatgpt.com "HTML check: The element “button” must not appear as a descendant ..."

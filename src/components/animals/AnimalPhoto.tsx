@@ -8,7 +8,8 @@ import { getAccessToken } from "@/stores/auth";
 
 type PhotoRef =
   | {
-      read_url: string;
+      url?: string;
+      read_url?: string;
     }
   | null;
 
@@ -16,6 +17,7 @@ type Props = {
   photo: PhotoRef;
   alt: string;
   size?: "sm" | "md";
+  shape?: "square" | "circle";
 };
 
 type ReadResponse = {
@@ -24,16 +26,27 @@ type ReadResponse = {
   created_at: string;
 };
 
-export function AnimalPhoto({ photo, alt, size = "md" }: Props) {
+export function AnimalPhoto({
+  photo,
+  alt,
+  size = "md",
+  shape = "square",
+}: Props) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const dimensions =
-    size === "sm"
-      ? "h-10 w-10"
-      : "h-32 w-32";
+  const dimensions = size === "sm" ? "h-10 w-10" : "h-32 w-32";
+  const radius = shape === "circle" ? "rounded-full" : "rounded-lg";
 
   useEffect(() => {
+    // Contrato novo: URL pronta
+    if (photo?.url && photo.url.trim().length > 0) {
+      setUrl(photo.url);
+      setLoading(false);
+      return;
+    }
+
+    // Compat legado
     if (!photo?.read_url) {
       setUrl(null);
       return;
@@ -47,15 +60,12 @@ export function AnimalPhoto({ photo, alt, size = "md" }: Props) {
       try {
         const token = getAccessToken();
 
-        const res = await fetch(
-          `${ENV.API_BASE_URL}${photo.read_url}`,
-          {
-            credentials: "include",
-            headers: {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-          }
-        );
+        const res = await fetch(`${ENV.API_BASE_URL}${photo.read_url}`, {
+          credentials: "include",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
 
         if (!res.ok) return;
 
@@ -76,13 +86,13 @@ export function AnimalPhoto({ photo, alt, size = "md" }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [photo?.read_url]);
+  }, [photo?.url, photo?.read_url]);
 
   return (
     <div
       className={`
         ${dimensions}
-        rounded-full
+        ${radius}
         bg-zinc-200
         overflow-hidden
         flex items-center justify-center
@@ -90,9 +100,7 @@ export function AnimalPhoto({ photo, alt, size = "md" }: Props) {
       `}
     >
       {loading && (
-        <span className="text-xs text-zinc-400">
-          Carregando…
-        </span>
+        <span className="text-xs text-zinc-400">Carregando…</span>
       )}
 
       {!loading && url && (

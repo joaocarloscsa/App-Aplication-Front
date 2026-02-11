@@ -35,9 +35,11 @@ export function StorageOverlay() {
       {/* modal */}
       <div className="relative z-10 w-full max-w-xl rounded-xl bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Uso de Storage
-          </h2>
+         
+         
+          <h2 className="text-lg font-semibold text-zinc-900">Uso de Storage</h2>
+
+
           <button
             onClick={closeOverlay}
             className="text-sm text-zinc-500 hover:text-zinc-900"

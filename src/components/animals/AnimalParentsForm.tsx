@@ -197,7 +197,7 @@ export function AnimalParentsForm({ publicId, animal }: Props) {
           ] as const).map(([field, placeholder]) => (
             <input
               key={field}
-              className="w-full rounded border px-2 py-1 text-sm"
+              className="w-full rounded-lx border px-2 py-1 text-sm"
               placeholder={placeholder}
               value={s[field] ?? ""}
               onChange={(e) =>

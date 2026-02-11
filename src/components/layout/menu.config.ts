@@ -14,6 +14,11 @@ export const MENU_ITEMS: MenuItem[] = [
     href: "/dashboard",
   },
   {
+  key: "profile",
+  label: "Perfil",
+  href: "/dashboard/profile",
+  },
+  {
     key: "animals",
     label: "Animais",
     href: "/dashboard/animals",

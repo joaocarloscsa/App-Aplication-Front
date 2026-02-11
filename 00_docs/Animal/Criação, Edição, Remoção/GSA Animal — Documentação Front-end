@@ -1,0 +1,354 @@
+Perfeito. Então vou entregar **o Documento de Referência Front-end — Área de Animal (oficial)**, do jeito que você pediu: **registrando decisões, contratos reais, armadilhas, rotas, arquivos, comportamento esperado e o porquê das coisas**.
+Esse documento serve exatamente para **qualquer próximo dev entrar e não quebrar nada**.
+
+---
+
+# 📘 GSA Animal — Documentação Front-end
+
+## Área: Cadastro e Gestão de Animal
+
+**Aplicação:** GSA Animal
+**Escopo:** Front-end
+**Domínio:** Animal, Parentagem, Foto, Identidade
+**Status:** Estável / Produção
+**Este documento é contrato de trabalho.**
+
+---
+
+## 1. Visão geral da área
+
+A área de **Animal** no front-end **não é um formulário simples**, nem CRUD trivial.
+
+Ela envolve:
+
+* Identidade pública (`public_id`)
+* Foto com upload e crop
+* Dados básicos
+* Parentagem (pai/mãe) com regras de domínio
+* Comportamentos automáticos do backend
+* Estados onde **ignorar dados é comportamento válido**
+
+Frontend **não decide regra de domínio**, apenas **envia intenção e reflete estado**.
+
+---
+
+## 2. Arquitetura de páginas
+
+### 2.1 Rota principal
+
+```
+/dashboard/animals/[animalId]
+```
+
+Arquivo:
+
+```
+src/app/(protected)/dashboard/animals/[animalId]/page.tsx
+```
+
+Responsabilidade:
+
+* Buscar animal (`GET /api/v1/animals/{publicId}`)
+* Orquestrar subcomponentes
+* Nunca reimplementar lógica de domínio
+
+---
+
+## 3. Estrutura visual (topo → base)
+
+### 3.1 Bloco de identidade do animal (topo)
+
+Componentes envolvidos:
+
+* `AnimalPhotoBlock`
+* Bloco de nome + ID
+* Botão copiar ID
+
+**Regras:**
+
+* Nome exibido (call_name)
+* ID público sempre visível
+* ID sempre com botão **Copiar**
+* Layout responsivo:
+
+  * Desktop: foto + nome lado a lado
+  * Mobile: empilhado
+
+---
+
+## 4. Foto do Animal
+
+### 4.1 Componente
+
+```
+src/components/animals/AnimalPhotoBlock.tsx
+```
+
+### 4.2 Regras de UX
+
+* Foto **quadrada**
+* Preview local imediato
+* Crop obrigatório antes do upload
+* Upload substitui a imagem anterior
+* Nenhum redirect
+* Nenhum reload de página
+* Erro exibido localmente
+
+### 4.3 Fluxo técnico
+
+1. Usuário seleciona arquivo
+2. Abre modal de crop
+3. Usuário confirma crop
+4. Front gera novo `File`
+5. Envia multipart/form-data
+
+### 4.4 Endpoint de upload
+
+```
+POST /api/v1/animals/{publicId}/photo
+Content-Type: multipart/form-data
+file=<imagem>
+```
+
+### 4.5 Resposta esperada
+
+```json
+{
+  "animal_public_id": "ANI_XXXX",
+  "photo": {
+    "read_url": "/api/v1/animals/ANI_XXXX/photo/read"
+  }
+}
+```
+
+### 4.6 Leitura da imagem
+
+```
+GET /api/v1/animals/{publicId}/photo/read
+```
+
+Resposta:
+
+```json
+{
+  "url": "https://signed-s3-url",
+  "expires_in": 300,
+  "created_at": "2026-02-10T23:03:40+00:00"
+}
+```
+
+⚠️ **A URL é temporária**.
+Frontend deve aceitar que ela expire e será renovada em novo GET do animal.
+
+---
+
+## 5. Dados básicos do animal
+
+### 5.1 Componente
+
+```
+src/components/animals/AnimalBasicForm.tsx
+```
+
+### 5.2 Campos cobertos (todos vindos do backend)
+
+* call_name
+* official_name
+* provisional_name
+* type
+* sex
+* breed
+* coat_color
+* coat_type
+* birth_date
+* microchip_number
+* registry_issuer
+* registry_number
+* notes
+* created_at (somente leitura)
+* updated_at (somente leitura)
+
+⚠️ **created_at e updated_at nunca são enviados no PATCH**, apenas exibidos.
+
+### 5.3 Salvamento
+
+Endpoint:
+
+```
+PATCH /api/v1/animals/{publicId}
+```
+
+Comportamento:
+
+* PATCH parcial
+* Backend ignora campos inválidos sem erro
+* Front não deve validar regra de domínio
+
+### 5.4 UX obrigatória
+
+* Botão salvar **não move a tela**
+* Feedback visual explícito (ex: “Salvo com sucesso”)
+* Não redirecionar
+* Não resetar formulário
+
+---
+
+## 6. Parentagem (Pai / Mãe)
+
+### 6.1 Componente
+
+```
+src/components/animals/AnimalParentsForm.tsx
+```
+
+Subcomponentes:
+
+* `AnimalParentAutocomplete`
+* Campos de snapshot
+* Botão remover vínculo
+
+---
+
+## 6.2 Tipos de pai/mãe (regra de domínio)
+
+### Pai/Mãe **interno**
+
+* Existe vínculo com outro Animal
+* Campos **não editáveis**
+* Apenas `notes` é editável
+* Backend ignora outros campos enviados
+* UI deve refletir estado (campos bloqueados)
+
+### Pai/Mãe **externo**
+
+* Não existe vínculo real
+* Snapshot independente
+* Todos os campos editáveis
+* Dados gravados exatamente como enviados
+
+---
+
+## 6.3 Autocomplete (seleção de pai/mãe)
+
+Componente:
+
+```
+src/components/animals/AnimalParentAutocomplete.tsx
+```
+
+Fluxo correto:
+
+1. Busca animal (`/api/v1/animals/search`)
+2. Usuário seleciona
+3. Front envia:
+
+```json
+{
+  "father": { "public_id": "ANI_XXXX" }
+}
+```
+
+4. Backend decide se é interno ou externo
+5. Front **não busca dados diretos do pai**
+6. Front **usa sempre o snapshot retornado no GET do animal**
+
+⚠️ **Nunca preencher snapshot buscando o animal pai diretamente.**
+
+---
+
+## 6.4 Remoção de vínculo
+
+Payload:
+
+```json
+{
+  "parents": {
+    "father": { "action": "remove" }
+  }
+}
+```
+
+Comportamento:
+
+* Interno → vira externo
+* Snapshot preservado
+* Idempotente
+* UI não deve dar reload
+* UI não deve subir a tela
+
+---
+
+## 7. Regras absolutas de UI (não quebrar)
+
+❌ Não inferir regra de domínio
+❌ Não apagar snapshot local
+❌ Não tratar campo ignorado como erro
+❌ Não usar status HTTP para regra de negócio
+❌ Não redirecionar após salvar
+❌ Não dar reload de página
+
+✅ Sempre refletir `type` retornado
+✅ Sempre mostrar ID público
+✅ Sempre oferecer botão copiar ID
+✅ Sempre usar snapshot para exibição
+
+---
+
+## 8. Botão “Copiar ID”
+
+Componente reutilizável:
+
+```
+src/components/dashboard/CopyId.tsx
+```
+
+Regras:
+
+* Sempre ao lado de qualquer public_id
+* Animal, Pessoa, etc.
+* Botão explícito (ícone + hover)
+* Nunca esconder funcionalidade
+
+---
+
+## 9. HTTP Client (ponto crítico)
+
+Arquivo:
+
+```
+src/services/http.ts
+```
+
+### Regras importantes:
+
+* Upload (`FormData`) **não usa JSON**
+* Não forçar refresh token em request binário
+* `credentials: include` sempre ativo
+* Erro 401 em imagens **não invalida sessão**
+
+⚠️ Erros de imagem **não são logout**.
+
+---
+
+## 10. Decisões registradas (para o futuro)
+
+* Foto do animal: **quadrada**
+* Foto da pessoa: **circular**
+* Foto da pessoa **não é editada no dashboard**
+* Perfil do usuário é uma tela separada
+* Parentagem segue contrato do backend
+* Código é a fonte da verdade, não suposições
+
+---
+
+## 11. Conclusão
+
+Esta área está **estável, fechada e documentada**.
+
+Qualquer alteração futura deve:
+
+1. Ler este documento
+2. Conferir o backend
+3. Não introduzir lógica paralela
+4. Não quebrar UX já validada
+

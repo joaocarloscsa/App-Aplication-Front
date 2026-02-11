@@ -12,6 +12,8 @@ import { SideMenu } from "@/components/layout/SideMenu";
 function getPersonDisplayName(me: any): string {
   const email: string = me?.user?.email ?? "";
   const personName: string = (me?.person?.name ?? "").trim();
+  const { reloadMe } = useMe();
+
   if (personName) return personName;
   return email ? email.split("@")[0] : "Usuário";
 }
@@ -39,6 +41,8 @@ async function copyToClipboard(text: string) {
 }
 
 export default function TopBar() {
+  const { reloadMe } = useMe();
+
   const { me, resetMe } = useMe();
   const router = useRouter();
   const { openOverlay } = useDashboardOverlay();
@@ -75,7 +79,6 @@ export default function TopBar() {
         <div className="md:hidden">
           <SideMenu mobile />
         </div>
-
         {/* Logo / title */}
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-xs font-semibold text-white">
@@ -86,7 +89,6 @@ export default function TopBar() {
             <div className="text-sm font-semibold text-zinc-900">
               GSA Animal
             </div>
-
             {personId && (
               <button
                 type="button"
@@ -103,9 +105,15 @@ export default function TopBar() {
             )}
           </div>
         </div>
-
         <div className="flex-1" />
-
+              <button
+        type="button"
+        onClick={reloadMe}
+        title="Atualizar dashboard"
+        className="relative rounded-full p-2 hover:bg-zinc-100"
+      >
+        🔄
+      </button>
         {/* Right actions */}
         <div className="flex items-center gap-4">
           <button
@@ -145,16 +153,27 @@ export default function TopBar() {
               </span>
             </button>
 
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-white shadow-lg">
-                <button
-                  onClick={handleLogout}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100"
-                >
-                  Sair
-                </button>
-              </div>
-            )}
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-44 rounded-xl border bg-white shadow-lg">
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      router.push("/dashboard/profile");
+                    }}
+                    className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100"
+                  >
+                    Editar perfil
+                  </button>
+
+                  <button
+                    onClick={handleLogout}
+                    className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100"
+                  >
+                    Sair
+                  </button>
+                </div>
+              )}
+
           </div>
         </div>
       </div>

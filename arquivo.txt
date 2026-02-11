@@ -1,549 +1,107 @@
 
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/http.ts =====
-// /var/www/GSA/animal/frontend/src/services/http.ts
-
-import { ENV } from "@/lib/env";
-import {
-  getAccessToken,
-  setAccessToken,
-  clearAccessToken,
-} from "@/stores/auth";
-
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
-export type HttpOptions = {
-  method?: HttpMethod;
-  headers?: Record<string, string>;
-  body?: unknown;
-  credentials?: RequestCredentials;
-};
-
-export class HttpError extends Error {
-  status: number;
-  body: unknown;
-
-  constructor(status: number, body: unknown) {
-    super(`HTTP Error ${status}`);
-    this.status = status;
-    this.body = body;
-  }
-}
-
-async function refreshToken(): Promise<string | null> {
-  const response = await fetch(`${ENV.API_BASE_URL}/api/token/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    clearAccessToken();
-    return null;
-  }
-
-  const data = await response.json();
-
-  setAccessToken(data.token);
-
-  return data.token;
-}
-
-
-export async function http<T>(
-  path: string,
-  options: HttpOptions = {},
-  retry = true
-): Promise<T> {
-  const token = getAccessToken();
-
-  const response = await fetch(`${ENV.API_BASE_URL}${path}`, {
-    method: options.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers ?? {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    credentials: options.credentials ?? "include", // ✅ respeita o caller
-  });
-
-  if (response.status === 401 && retry) {
-    const newToken = await refreshToken();
-
-    if (!newToken) {
-      throw new HttpError(401, null);
-    }
-
-    return http<T>(path, options, false);
-  }
-
-  if (!response.ok) {
-    let body: unknown = null;
-    try {
-      body = await response.json();
-    } catch {}
-    throw new HttpError(response.status, body);
-  }
-
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  return (await response.json()) as T;
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/services/http.ts =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/auth.ts =====
-// src/services/auth.ts
-
-import { http } from "@/services/http";
-import { setAccessToken, clearAccessToken } from "@/stores/auth";
-import { HttpError } from "@/services/http";
-
-/* =========================
-   TYPES
-========================= */
-
-type LoginResponse = {
-  access_token: string;
-  token_type: "Bearer";
-  expires_in: number;
-};
-
-type OAuthExchangeResponse = {
-  token: string;
-};
-
-type ApiError = {
-  code: string;
-  message: string;
-};
-
-/* =========================
-   LOGIN
-========================= */
-
-export async function login(email: string, password: string): Promise<void> {
-  try {
-    const response = await http<LoginResponse>(
-      "/api/login",
-      {
-        method: "POST",
-        body: { email, password },
-        credentials: "include",
-      },
-      false
-    );
-     setAccessToken(response.access_token);
-    // só chega aqui se autenticou
-    return;
-  } catch (err) {
-    if (err instanceof HttpError && err.body) {
-      throw err.body; // 🔥 REPASSA o JSON real do backend
-    }
-    throw err;
-  }
-}
-
-
-
-export async function oauthExchange(
-  provider: "google",
-  exchangeCode: string
-): Promise<void> {
-  const response = await http<OAuthExchangeResponse>(
-    "/api/auth/oauth/exchange",
-    {
-      method: "POST",
-      body: {
-        provider,
-        exchange_code: exchangeCode,
-      },
-      credentials: "include",
-    }
-  );
-
-  setAccessToken(response.token);
-}
-
-export function logout(): void {
-  clearAccessToken();
-}
-
-/* =========================
-   REGISTRO
-========================= */
-
-export async function registerUser(data: {
-  full_name: string;
-  email: string;
-  password: string;
-  phone?: string;
-}): Promise<void> {
-  await http("/api/public/users/signup", {
-    method: "POST",
-    body: data,
-  });
-}
-
-/* =========================
-   VERIFICAÇÃO DE E-MAIL
-========================= */
-
-export async function verifyEmail(token: string): Promise<void> {
-  try {
-    await http(`/api/public/users/verify-email/${token}`, {
-      method: "POST",
-    });
-  } catch (err: any) {
-    if (err instanceof Error && 'body' in err) {
-      const body = err.body as any;
-
-      if (body?.error?.code) {
-        throw body.error;
-      }
-    }
-
-    throw {
-      code: "email_verification_unknown_error",
-      message: "Erro inesperado ao verificar e-mail.",
-    };
-  }
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/services/auth.ts =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/stores/auth.ts =====
-// /var/www/GSA/animal/frontend/src/stores/auth.ts
-
-let accessToken: string | null = null;
-
-export function setAccessToken(token: string): void {
-  accessToken = token;
-}
-
-export function getAccessToken(): string | null {
-  return accessToken;
-}
-
-export function clearAccessToken(): void {
-  accessToken = null;
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/stores/auth.ts =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/MeContext.tsx =====
-// /var/www/GSA/animal/frontend/src/components/MeContext.tsx
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx =====
+// /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx
 
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
-import { fetchMe, MeResponse } from "@/services/me";
-import { clearAccessToken } from "@/stores/auth";
-
-type MeContextValue = {
-  me: MeResponse | null;
-  loading: boolean;
-  reloadMe: () => Promise<void>;
-  resetMe: () => void;
-};
-
-const MeContext = createContext<MeContextValue | undefined>(undefined);
-
-export function MeProvider({ children }: { children: ReactNode }) {
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  async function loadMe() {
-    setLoading(true);
-    try {
-      const data = await fetchMe();
-      setMe(data);
-    } catch {
-      setMe(null);
-      clearAccessToken();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function resetMe() {
-    setMe(null);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    loadMe();
-  }, []);
-
-  return (
-    <MeContext.Provider
-      value={{
-        me,
-        loading,
-        reloadMe: loadMe,
-        resetMe,
-      }}
-    >
-      {children}
-    </MeContext.Provider>
-  );
-}
-
-export function useMe(): MeContextValue {
-  const ctx = useContext(MeContext);
-  if (!ctx) {
-    throw new Error("useMe must be used inside MeProvider");
-  }
-  return ctx;
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/components/MeContext.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/login/page.tsx =====
-"use client";
-
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { login } from "@/services/auth";
 import { useMe } from "@/components/MeContext";
+import { Card } from "./Card";
+import { useDashboardOverlay } from "./DashboardOverlayContext";
+import { PersonPhotoBlock } from "@/components/dashboard/PersonPhotoBlock";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const { me, reloadMe, loading } = useMe();
+function getInitials(name: string): string {
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (parts.length === 0) return "U";
+  if (parts.length === 1) return (parts[0][0] ?? "U").toUpperCase();
+  return (
+    ((parts[0][0] ?? "") +
+      (parts[parts.length - 1][0] ?? "")).toUpperCase()
+  );
+}
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+function getPersonDisplayName(me: any): string {
+  const email: string = me?.user?.email ?? "";
+  const personName: string = (me?.person?.name ?? "").trim();
+  if (personName) return personName;
+  return email ? email.split("@")[0] : "Usuário";
+}
 
-  useEffect(() => {
-    if (!loading && me !== null) {
-      router.replace("/dashboard");
-    }
-  }, [loading, me, router]);
+export function UserCard() {
+  const { me, reloadMe } = useMe();
+  const { openOverlay } = useDashboardOverlay();
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
+  if (!me) return null;
 
-    try {
-      await login(email, password);
-      await reloadMe();
-    } catch (err: any) {
-      if (err?.message === "email_not_verified") {
-        router.push(`/email-not-verified?email=${encodeURIComponent(email)}`);
-        return;
-      }
-      setError("E-mail ou senha inválidos");
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const personId: string = me?.person?.public_id ?? "";
+  const displayName = getPersonDisplayName(me);
 
-  function handleGoogleLogin() {
-    const frontendBase = window.location.origin;
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const profilePhotoUrl: string | null =
+    me?.person?.profile_photo?.read_url ?? null;
 
-    window.location.href =
-      `${apiBase}/connect/google?redirect_uri=` +
-      encodeURIComponent(frontendBase);
-  }
+  const phone: string | null =
+    me?.person?.contacts?.[0]?.value ?? null;
+
+  const address: string | null = (() => {
+    const a = me?.person?.addresses?.[0];
+    if (!a) return null;
+    const parts = [
+      a.street,
+      a.city,
+      a.region,
+      a.country,
+      a.postal_code,
+    ].filter(Boolean);
+    return parts.join(", ");
+  })();
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-6">
-      <div className="w-full max-w-md space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 text-sm font-semibold">
-              GSA
-            </div>
-            <div>
-              <div className="text-lg font-semibold leading-6">
-                GSA Animal
-              </div>
-              <div className="text-sm text-zinc-600">
-                Acesso à plataforma
-              </div>
-            </div>
+    <Card title="Usuário">
+      <div className="flex items-start gap-4">
+        {/* FOTO (ação própria, NÃO fica dentro de botão) */}
+        <PersonPhotoBlock
+          readUrl={profilePhotoUrl}
+          name={displayName}
+          onUploaded={reloadMe}
+        />
+
+        {/* DADOS (clicável para abrir overlay) */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => openOverlay("user")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") openOverlay("user");
+          }}
+          className="flex-1 min-w-0 cursor-pointer"
+        >
+          <div className="truncate text-sm font-semibold text-zinc-900">
+            {displayName}
           </div>
 
-        <div className="rounded-2xl border bg-white p-6 space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="email"
-              placeholder="E-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="h-11 w-full rounded-xl border px-3 text-sm"
-            />
-
-            <input
-              type="password"
-              placeholder="Senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="h-11 w-full rounded-xl border px-3 text-sm"
-            />
-
-            {error && (
-              <div className="text-sm text-red-600">{error}</div>
-            )}
-
-<button
-  type="submit"
-  disabled={submitting}
-  className={`
-    h-11 w-full rounded-xl
-    bg-zinc-900 text-white font-medium
-    transition
-    ${submitting
-      ? "opacity-60 cursor-not-allowed"
-      : "cursor-pointer hover:bg-zinc-800"}
-  `}
->
-  {submitting ? "Entrando..." : "Entrar"}
-</button>
-
-          </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t" />
+          {me?.user?.email && (
+            <div className="truncate text-xs text-zinc-500">
+              {me.user.email}
             </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-2 text-zinc-500">
-                ou
-              </span>
+          )}
+
+          {personId && (
+            <div className="mt-1 font-mono text-xs text-zinc-600">
+              {personId}
             </div>
-          </div>
+          )}
 
-<button
-  type="button"
-  onClick={handleGoogleLogin}
-  className="
-    h-11 w-full rounded-xl border border-zinc-300
-    flex items-center justify-center gap-3
-    bg-white text-sm font-medium text-zinc-800
-    hover:bg-zinc-50 hover:border-zinc-400
-    focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2
-    transition
-  "
->
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 48 48"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <path
-      fill="#EA4335"
-      d="M24 9.5c3.54 0 6.7 1.23 9.2 3.25l6.9-6.9C35.9 2.35 30.3 0 24 0 14.6 0 6.4 5.38 2.5 13.2l8 6.2C12.3 13.1 17.7 9.5 24 9.5z"
-    />
-    <path
-      fill="#4285F4"
-      d="M46.1 24.5c0-1.6-.15-3.15-.43-4.65H24v9h12.4c-.54 2.9-2.18 5.35-4.64 7.05l7.1 5.5c4.15-3.85 6.24-9.5 6.24-16.95z"
-    />
-    <path
-      fill="#FBBC05"
-      d="M10.5 28.4c-.5-1.5-.8-3.1-.8-4.9s.3-3.4.8-4.9l-8-6.2C.9 15.8 0 19.8 0 23.5s.9 7.7 2.5 11.1l8-6.2z"
-    />
-    <path
-      fill="#34A853"
-      d="M24 47c6.3 0 11.9-2.1 15.9-5.7l-7.1-5.5c-2 1.35-4.55 2.15-8.8 2.15-6.3 0-11.7-3.6-13.5-8.9l-8 6.2C6.4 42.6 14.6 47 24 47z"
-    />
-  </svg>
-
-  <span>Entrar com Google</span>
-</button>
-
-
-
+          {(phone || address) && (
+            <div className="mt-3 space-y-1 text-xs text-zinc-600">
+              {phone && <div>📞 {phone}</div>}
+              {address && (
+                <div className="truncate">📍 {address}</div>
+              )}
+            </div>
+          )}
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-
-<button
-  type="button"
-  onClick={() => router.push("/forgot-password")}
-  className="
-    h-14 w-full rounded-xl border border-zinc-300
-    bg-white text-left px-4
-    hover:bg-zinc-50 hover:border-zinc-400
-    focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2
-    transition
-  "
->
-  <div className="text-sm font-medium text-zinc-900">
-    Esqueci a senha
-  </div>
-  <div className="text-xs text-zinc-500">
-    Recuperar acesso
-  </div>
-</button>
-
-<button
-  type="button"
-  onClick={() => router.push("/register")}
-  className="
-    h-14 w-full rounded-xl border border-zinc-300
-    bg-white text-left px-4
-    hover:bg-zinc-50 hover:border-zinc-400
-    focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2
-    transition
-  "
->
-  <div className="text-sm font-medium text-zinc-900">
-    Criar conta
-  </div>
-  <div className="text-xs text-zinc-500">
-    Novo registro
-  </div>
-</button>
-
-
-  
-</div>
-
       </div>
-    </div>
+    </Card>
   );
 }
 
-
-===== END FILE: /var/www/GSA/animal/frontend/src/app/login/page.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/layout.tsx =====
-// /var/www/GSA/animal/frontend/src/app/layout.tsx
-
-import "./globals.css";
-import { ClientProviders } from "./ClientProviders";
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="pt">
-      <body>
-        <ClientProviders>{children}</ClientProviders>
-      </body>
-    </html>
-  );
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/app/layout.tsx =====
+===== END FILE: /var/www/GSA/animal/frontend/src/components/dashboard/UserCard.tsx =====
