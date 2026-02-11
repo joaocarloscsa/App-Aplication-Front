@@ -52,15 +52,12 @@ export async function http<T>(
   const token = getAccessToken();
   const isFormData = options.body instanceof FormData;
 
-  let body: BodyInit | undefined;
-
-  if (options.body !== undefined) {
-    if (isFormData) {
-      body = options.body;
-    } else {
-      body = JSON.stringify(options.body);
-    }
-  }
+  const body: BodyInit | undefined =
+    options.body instanceof FormData
+      ? options.body
+      : options.body
+      ? JSON.stringify(options.body)
+      : undefined;
 
   const response = await fetch(`${ENV.API_BASE_URL}${path}`, {
     method: options.method ?? "GET",
@@ -73,7 +70,8 @@ export async function http<T>(
     credentials: options.credentials ?? "include",
   });
 
-  if (response.status === 401 && retry) {
+  // 🔴 401: só tenta refresh se NÃO for upload
+  if (response.status === 401 && retry && !isFormData) {
     const newToken = await refreshToken();
 
     if (!newToken) {
@@ -83,14 +81,16 @@ export async function http<T>(
     return http<T>(path, options, false);
   }
 
+  // ❌ Erros definitivos
   if (!response.ok) {
-    let body: unknown = null;
+    let errorBody: unknown = null;
     try {
-      body = await response.json();
+      errorBody = await response.json();
     } catch {}
-    throw new HttpError(response.status, body);
+    throw new HttpError(response.status, errorBody);
   }
 
+  // 204 sem conteúdo
   if (response.status === 204) {
     return null as T;
   }
