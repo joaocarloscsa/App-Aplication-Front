@@ -15,15 +15,18 @@ export default function ProtectedLayout({
   return (
     <AuthGuard>
       <DashboardOverlayProvider>
-        <div className="flex min-h-screen flex-col bg-zinc-50">
+        <div className="min-h-screen bg-zinc-50 flex flex-col">
           <TopBar />
 
-          <div className="flex flex-1">
-            {/* Desktop side menu */}
-            <SideMenu />
+          {/* CONTAINER PRINCIPAL */}
+          <div className="mx-auto w-full max-w-7xl flex flex-col md:flex-row flex-1">
+            {/* SIDEBAR — APENAS DESKTOP */}
+            <div className="hidden md:block shrink-0">
+              <SideMenu />
+            </div>
 
-            {/* Main content */}
-            <main className="relative flex-1 overflow-x-hidden">
+            {/* CONTEÚDO */}
+            <main className="relative flex-1 w-full overflow-x-hidden px-4 py-6">
               {children}
             </main>
           </div>
@@ -34,4 +37,3 @@ export default function ProtectedLayout({
     </AuthGuard>
   );
 }
-

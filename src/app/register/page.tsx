@@ -67,6 +67,8 @@ export default function RegisterPage() {
       await signup({
         full_name: fullName,
         email: normalizedEmail,
+        first_name: firstName,
+        last_name: lastName,
         password,
       });
 

@@ -96,7 +96,7 @@ export default function TopBar() {
                 className="flex items-center gap-1 font-mono text-[11px] text-zinc-600 hover:text-zinc-900"
                 title="Clique para copiar o ID do usuário"
               >
-                <span>ID: {personId}</span>
+                <span> {personId}</span>
                 <span>📋</span>
                 {copied && (
                   <span className="text-green-600">copiado</span>
