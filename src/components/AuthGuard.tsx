@@ -1,23 +1,41 @@
-// src/components/AuthGuard.tsx
+// /var/www/GSA/animal/frontend/src/components/AuthGuard.tsx
 
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useMe } from "@/components/MeContext";
 
-export function AuthGuard({ children }: { children: ReactNode }) {
-  const { me, loading } = useMe();
+type Props = {
+  children: ReactNode;
+};
 
-  // Enquanto está carregando, bloqueia tudo
+export function AuthGuard({ children }: Props) {
+  const { me, loading } = useMe();
+  const router = useRouter();
+
+  // Redirecionamento é efeito colateral → useEffect
+  useEffect(() => {
+    if (!loading && me === null) {
+      router.replace("/login");
+    }
+  }, [loading, me, router]);
+
+  // Enquanto carrega, estado explícito
   if (loading) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <span className="text-sm text-zinc-500">Carregando…</span>
+      </div>
+    );
   }
 
-  // Não autenticado → NÃO renderiza, mas também NÃO redireciona
+  // Não autenticado → bloqueia render enquanto redireciona
   if (me === null) {
     return null;
   }
 
+  // Autenticado
   return <>{children}</>;
 }
 

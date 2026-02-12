@@ -1,6 +1,6 @@
 "use client";
 
-import CopyId from "@/components/dashboard/CopyId";
+import { CopyId } from "@/components/dashboard/CopyId";
 
 type Props = {
   me: any;

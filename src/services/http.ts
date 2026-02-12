@@ -27,22 +27,47 @@ export class HttpError extends Error {
   }
 }
 
-async function refreshToken(): Promise<string | null> {
-  const response = await fetch(`${ENV.API_BASE_URL}/api/token/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
+/**
+ * =========================
+ * Refresh token mutex
+ * =========================
+ */
 
-  if (!response.ok) {
-    clearAccessToken();
-    return null;
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const response = await fetch(
+        `${ENV.API_BASE_URL}/api/token/refresh`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
+
+      if (!response.ok) {
+        clearAccessToken();
+        return null;
+      }
+
+      const data = await response.json();
+      setAccessToken(data.token);
+
+      return data.token;
+    })().finally(() => {
+      refreshPromise = null;
+    });
   }
 
-  const data = await response.json();
-  setAccessToken(data.token);
-
-  return data.token;
+  return refreshPromise;
 }
+
+/**
+ * =========================
+ * HTTP client
+ * =========================
+ */
 
 export async function http<T>(
   path: string,
@@ -70,7 +95,7 @@ export async function http<T>(
     credentials: options.credentials ?? "include",
   });
 
-  // 🔴 401: só tenta refresh se NÃO for upload
+  // 401 → tenta refresh UMA VEZ, coordenado por mutex
   if (response.status === 401 && retry && !isFormData) {
     const newToken = await refreshToken();
 
@@ -81,7 +106,6 @@ export async function http<T>(
     return http<T>(path, options, false);
   }
 
-  // ❌ Erros definitivos
   if (!response.ok) {
     let errorBody: unknown = null;
     try {
@@ -90,10 +114,10 @@ export async function http<T>(
     throw new HttpError(response.status, errorBody);
   }
 
-  // 204 sem conteúdo
   if (response.status === 204) {
     return null as T;
   }
 
   return (await response.json()) as T;
 }
+
