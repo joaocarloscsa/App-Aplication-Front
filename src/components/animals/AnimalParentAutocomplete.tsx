@@ -1,4 +1,4 @@
-// /var/www/GSA/animal/frontend/src/components/animals/AnimalParentAutocomplete.tsx
+// path: /var/www/GSA/animal/frontend/src/components/animals/AnimalParentAutocomplete.tsx
 
 "use client";
 
@@ -20,15 +20,40 @@ type ParentSnapshot = {
 };
 
 type Props = {
-  animalId: string;
   kind: "father" | "mother";
+
+  /**
+   * edit  = comportamento original (PATCH + refresh + snapshot)
+   * litter = somente seleciona o public_id (sem PATCH)
+   */
+  mode?: "edit" | "litter";
+
+  /**
+   * Necessário apenas no modo edit.
+   */
+  animalId?: string;
+
+  /**
+   * Callback original do modo edit (mantido).
+   */
   onSaved?: (data: {
     parent_public_id: string;
     snapshot: ParentSnapshot;
   }) => void;
+
+  /**
+   * Callback do modo litter.
+   */
+  onSelect?: (payload: { public_id: string }) => void;
 };
 
-export function AnimalParentAutocomplete({ animalId, kind, onSaved }: Props) {
+export function AnimalParentAutocomplete({
+  animalId,
+  kind,
+  onSaved,
+  onSelect,
+  mode = "edit",
+}: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AnimalListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,23 +80,37 @@ export function AnimalParentAutocomplete({ animalId, kind, onSaved }: Props) {
   }, [query]);
 
   async function handleSelect(animal: AnimalListItem) {
+    // ✅ sempre mostrar o PUBLIC_ID no input
+    setQuery(animal.public_id);
+    setResults([]);
+    setError(null);
+
+    // =========================
+    // MODO LITTER: só captura id
+    // =========================
+    if (mode === "litter") {
+      onSelect?.({ public_id: animal.public_id });
+      return;
+    }
+
+    // =========================
+    // MODO EDIT: comportamento original
+    // =========================
+    if (!animalId) {
+      setError("animalId ausente para modo edit.");
+      return;
+    }
+
     try {
       setSaving(true);
-      setError(null);
 
-      // 1) Envia intenção de vínculo interno
       await updateAnimalParents(animalId, {
         [kind]: { public_id: animal.public_id },
       });
 
-      // 2) Busca o animal ATUALIZADO (fonte da verdade)
       const updatedAnimal = await getAnimal<any>(animalId);
-
       const parentNode = updatedAnimal?.[kind];
       const snapshot = parentNode?.snapshot ?? {};
-
-      setQuery("");
-      setResults([]);
 
       onSaved?.({
         parent_public_id: animal.public_id,
@@ -94,9 +133,9 @@ export function AnimalParentAutocomplete({ animalId, kind, onSaved }: Props) {
         className="w-full rounded-lg border px-3 py-2 text-sm"
       />
 
-      {(loading || saving) && (
+      {(loading || (mode === "edit" && saving)) && (
         <div className="text-xs text-zinc-500">
-          {saving ? "Definindo vínculo…" : "Buscando…"}
+          {mode === "edit" && saving ? "Definindo vínculo…" : "Buscando…"}
         </div>
       )}
 

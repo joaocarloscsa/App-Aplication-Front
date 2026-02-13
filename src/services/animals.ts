@@ -1,4 +1,4 @@
-// src/services/animals.ts
+// /var/www/GSA/animal/frontend/src/services/animals.ts
 
 import { http } from "@/services/http";
 
@@ -19,39 +19,9 @@ export type ParentExternal = {
 
 export type ParentPayload = ParentByPublicId | ParentExternal;
 
-export type LitterPayload = {
-  count: number;
-};
-
-export type CreateAnimalPayload = {
-  type?: string;
-  sex?: "male" | "female" | "unknown";
-  coat_color?: string;
-  coat_type?: string;
-  breed?: string;
-  call_name?: string;
-  official_name?: string;
-  birth_date?: string;
-
-  litter?: LitterPayload;
-
-  father?: ParentPayload;
-  mother?: ParentPayload;
-};
-
-export type UpdateAnimalBasicPayload = {
-  call_name?: string;
-  official_name?: string;
-  type?: string;
-  sex?: "male" | "female";
-  breed?: string;
-  coat_color?: string;
-  coat_type?: string;
-  birth_date?: string;
-  microchip_number?: string;
-  registry_issuer?: string;
-  registry_number?: string;
-};
+/* =========================
+   LIST / SEARCH TYPES
+========================= */
 
 export type AnimalListItem = {
   public_id: string;
@@ -62,6 +32,35 @@ export type AnimalListItem = {
     url?: string;
   };
 };
+
+/* =========================
+   CREATE TYPES
+========================= */
+
+export type CreateAnimalBasicPayload = {
+  type?: string;
+  sex?: "male" | "female" | "unknown";
+  coat_color?: string;
+  coat_type?: string;
+  breed?: string;
+  call_name?: string;
+  official_name?: string;
+  birth_date?: string;
+  registry_issuer?: string;
+};
+
+export type CreateSingleAnimalPayload = {
+  basic?: CreateAnimalBasicPayload;
+  father?: ParentPayload;
+  mother?: ParentPayload;
+};
+
+export type CreateLitterPayload = {
+  count: number;
+} & CreateAnimalBasicPayload & {
+    father?: ParentPayload;
+    mother?: ParentPayload;
+  };
 
 /* =========================
    LIST
@@ -76,7 +75,7 @@ export async function fetchAnimals(): Promise<AnimalListItem[]> {
 }
 
 /* =========================
-   SEARCH (AUTOCOMPLETE)
+   SEARCH
 ========================= */
 
 export async function searchAnimals(
@@ -93,21 +92,50 @@ export async function searchAnimals(
 }
 
 /* =========================
-   CREATE
+   CREATE (DECISÃO CANÔNICA)
 ========================= */
 
 export async function createAnimal(
-  payload: CreateAnimalPayload = {}
+  params:
+    | {
+        mode: "single";
+        data: CreateSingleAnimalPayload;
+      }
+    | {
+        mode: "litter";
+        data: CreateLitterPayload;
+      }
 ) {
+  if (params.mode === "litter") {
+    return http("/api/v1/litters", {
+      method: "POST",
+      body: params.data,
+    });
+  }
+
   return http("/api/v1/animals", {
     method: "POST",
-    body: payload,
+    body: params.data,
   });
 }
 
 /* =========================
    UPDATE BASIC
 ========================= */
+
+export type UpdateAnimalBasicPayload = {
+  call_name?: string;
+  official_name?: string;
+  type?: string;
+  sex?: "male" | "female";
+  breed?: string;
+  coat_color?: string;
+  coat_type?: string;
+  birth_date?: string;
+  microchip_number?: string;
+  registry_issuer?: string;
+  registry_number?: string;
+};
 
 export async function updateAnimal(
   publicId: string,
@@ -122,13 +150,6 @@ export async function updateAnimal(
 /* =========================
    UPDATE PARENTS
 ========================= */
-
-export type ExternalParentPayload = {
-  official_name?: string;
-  microchip_number?: string;
-  registry_issuer?: string;
-  registry_number?: string;
-};
 
 export type ParentPatch =
   | { public_id: string }
@@ -154,8 +175,6 @@ export async function updateAnimalParents(
   });
 }
 
-
-
 /* =========================
    GET ONE
 ========================= */
@@ -165,3 +184,4 @@ export async function getAnimal<T = any>(publicId: string): Promise<T> {
     method: "GET",
   });
 }
+
