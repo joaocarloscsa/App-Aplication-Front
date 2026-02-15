@@ -1,4 +1,3 @@
-// src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
 "use client";
 
 import { ReactNode, useState } from "react";
@@ -15,87 +14,112 @@ export default function ClinicLayout({
   const animalId = params?.animalId as string;
   const [open, setOpen] = useState(false);
 
-  const base = `/dashboard/animals/${animalId}/clinic`;
+  const animalBase = `/dashboard/animals/${animalId}`;
+  const clinicBase = `${animalBase}/clinic`;
 
-  const items = [
-    { key: "overview", label: "Visão clínica", href: base },
-    { key: "medications", label: "Medicações", href: `${base}/medications` },
-    // futuros:
-    // { key: "vaccines", label: "Vacinas", href: `${base}/vaccines` },
-    // { key: "treatments", label: "Tratamentos", href: `${base}/treatments` },
-    // { key: "exams", label: "Exames", href: `${base}/exams` },
-  ];
+  function isActive(href: string, exact = false) {
+    if (exact) {
+      return pathname === href;
+    }
+    return pathname === href || pathname.startsWith(href + "/");
+  }
 
   return (
     <section className="space-y-6">
-      {/* MENU CLÍNICO — DESKTOP */}
+      {/* MENU DO ANIMAL — DESKTOP */}
       <nav className="hidden sm:block border-b border-zinc-200">
         <ul className="flex gap-6 text-sm">
-          {items.map((item) => {
-            const active =
-              pathname === item.href ||
-              pathname.startsWith(item.href + "/");
 
-            return (
-              <li key={item.key}>
-                <Link
-                  href={item.href}
-                  className={[
-                    "flex items-center gap-1 pb-2 transition-colors",
-                    active
-                      ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
-                      : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
-                  ].join(" ")}
-                >
-                  <span className="w-4 text-xs">
-                    {active ? "🐾" : ""}
-                  </span>
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
+          {/* VOLTAR AO ANIMAL */}
+          <li>
+            <Link
+              href={animalBase}
+              className={[
+                "flex items-center gap-1 pb-2 transition-colors",
+                isActive(animalBase, true)
+                  ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
+                  : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
+              ].join(" ")}
+            >
+              🐾 Animal
+            </Link>
+          </li>
+
+          {/* VISÃO CLÍNICA */}
+          <li>
+            <Link
+              href={clinicBase}
+              className={[
+                "flex items-center gap-1 pb-2 transition-colors",
+                isActive(clinicBase, true)
+                  ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
+                  : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
+              ].join(" ")}
+            >
+              Clínica
+            </Link>
+          </li>
+
+          {/* MEDICAÇÕES */}
+          <li>
+            <Link
+              href={`${clinicBase}/medications`}
+              className={[
+                "flex items-center gap-1 pb-2 transition-colors",
+                isActive(`${clinicBase}/medications`)
+                  ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
+                  : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
+              ].join(" ")}
+            >
+              Medicações
+            </Link>
+          </li>
+
+          {/* FUTUROS */}
+          {/*
+          <li>
+            <Link href={`${clinicBase}/vaccines`}>Vacinas</Link>
+          </li>
+          */}
         </ul>
       </nav>
 
-      {/* MENU CLÍNICO — MOBILE */}
+      {/* MENU DO ANIMAL — MOBILE */}
       <div className="sm:hidden relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium text-zinc-800"
-      >
-        🐾 Clínica
-        <span className="ml-auto text-xs">{open ? "▲" : "▼"}</span>
-      </button>
-
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium text-zinc-800"
+        >
+          🐾 Animal
+          <span className="ml-auto text-xs">{open ? "▲" : "▼"}</span>
+        </button>
 
         {open && (
           <div className="absolute z-10 mt-2 w-56 rounded-md border bg-white shadow">
-            {items.map((item) => {
-              const active =
-                pathname === item.href ||
-                pathname.startsWith(item.href + "/");
+            <Link
+              href={animalBase}
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 text-sm hover:bg-zinc-50"
+            >
+              Animal
+            </Link>
 
-              return (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={[
-                    "flex items-center gap-2 px-4 py-2 text-sm",
-                    active
-                      ? "bg-zinc-100 font-semibold"
-                      : "hover:bg-zinc-50",
-                  ].join(" ")}
-                >
-                  <span className="w-4 text-xs">
-                    {active ? "🐾" : ""}
-                  </span>
-                  {item.label}
-                </Link>
-              );
-            })}
+            <Link
+              href={clinicBase}
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 text-sm hover:bg-zinc-50"
+            >
+              Clínica
+            </Link>
+
+            <Link
+              href={`${clinicBase}/medications`}
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 text-sm hover:bg-zinc-50"
+            >
+              Medicações
+            </Link>
           </div>
         )}
       </div>
