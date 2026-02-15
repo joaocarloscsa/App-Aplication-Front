@@ -1,454 +1,4 @@
 
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/layout.tsx =====
-// /var/www/GSA/animal/frontend/src/app/layout.tsx
-
-import "./globals.css";
-import { ClientProviders } from "./ClientProviders";
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="pt">
-      <body>
-        <ClientProviders>{children}</ClientProviders>
-      </body>
-    </html>
-  );
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/app/layout.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/layout.tsx =====
-// src/app/(protected)/layout.tsx
-
-import { ReactNode } from "react";
-import { AuthGuard } from "@/components/AuthGuard";
-import TopBar from "@/components/layout/TopBar";
-import { DashboardOverlayProvider } from "@/components/dashboard/DashboardOverlayContext";
-import { DashboardOverlays } from "@/components/dashboard/DashboardOverlays";
-import { SideMenu } from "@/components/layout/SideMenu";
-
-export default function ProtectedLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <AuthGuard>
-      <DashboardOverlayProvider>
-        <div className="min-h-screen bg-zinc-50 flex flex-col">
-          <TopBar />
-
-          {/* CONTAINER PRINCIPAL */}
-          <div className="mx-auto w-full max-w-7xl flex flex-col md:flex-row flex-1">
-            {/* SIDEBAR — APENAS DESKTOP */}
-            <div className="hidden md:block shrink-0">
-              <SideMenu />
-            </div>
-
-            {/* CONTEÚDO */}
-            <main className="relative flex-1 w-full overflow-x-hidden px-4 py-6">
-              {children}
-            </main>
-          </div>
-
-          <DashboardOverlays />
-        </div>
-      </DashboardOverlayProvider>
-    </AuthGuard>
-  );
-}
-
-===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/layout.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/page.tsx =====
-import Image from "next/image";
-
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-===== END FILE: /var/www/GSA/animal/frontend/src/app/page.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/AuthGuard.tsx =====
-// src/components/AuthGuard.tsx
-
-"use client";
-
-import { ReactNode } from "react";
-import { useMe } from "@/components/MeContext";
-
-export function AuthGuard({ children }: { children: ReactNode }) {
-  const { me, loading } = useMe();
-
-  // Enquanto está carregando, bloqueia tudo
-  if (loading) {
-    return null;
-  }
-
-  // Não autenticado → NÃO renderiza, mas também NÃO redireciona
-  if (me === null) {
-    return null;
-  }
-
-  return <>{children}</>;
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/components/AuthGuard.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/MeContext.tsx =====
-// /var/www/GSA/animal/frontend/src/components/MeContext.tsx
-
-"use client";
-
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
-import { fetchMe, MeResponse } from "@/services/me";
-import { clearAccessToken } from "@/stores/auth";
-
-type MeContextValue = {
-  me: MeResponse | null;
-  loading: boolean;
-  reloadMe: () => Promise<void>;
-  resetMe: () => void;
-};
-
-const MeContext = createContext<MeContextValue | undefined>(undefined);
-
-export function MeProvider({ children }: { children: ReactNode }) {
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  async function loadMe() {
-    setLoading(true);
-    try {
-      const data = await fetchMe();
-      setMe(data);
-    } catch {
-      setMe(null);
-      clearAccessToken();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function resetMe() {
-    setMe(null);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    loadMe();
-  }, []);
-
-  return (
-    <MeContext.Provider
-      value={{
-        me,
-        loading,
-        reloadMe: loadMe,
-        resetMe,
-      }}
-    >
-      {children}
-    </MeContext.Provider>
-  );
-}
-
-export function useMe(): MeContextValue {
-  const ctx = useContext(MeContext);
-  if (!ctx) {
-    throw new Error("useMe must be used inside MeProvider");
-  }
-  return ctx;
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/components/MeContext.tsx =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/auth.ts =====
-// src/services/auth.ts
-
-import { http } from "@/services/http";
-import { setAccessToken, clearAccessToken } from "@/stores/auth";
-import { HttpError } from "@/services/http";
-
-/* =========================
-   TYPES
-========================= */
-
-type LoginResponse = {
-  access_token: string;
-  token_type: "Bearer";
-  expires_in: number;
-};
-
-type OAuthExchangeResponse = {
-  token: string;
-};
-
-type ApiError = {
-  code: string;
-  message: string;
-};
-
-/* =========================
-   LOGIN
-========================= */
-
-export async function login(email: string, password: string): Promise<void> {
-  try {
-    const response = await http<LoginResponse>(
-      "/api/login",
-      {
-        method: "POST",
-        body: { email, password },
-        credentials: "include",
-      },
-      false
-    );
-     setAccessToken(response.access_token);
-    // só chega aqui se autenticou
-    return;
-  } catch (err) {
-    if (err instanceof HttpError && err.body) {
-      throw err.body; // 🔥 REPASSA o JSON real do backend
-    }
-    throw err;
-  }
-}
-
-
-
-export async function oauthExchange(
-  provider: "google",
-  exchangeCode: string
-): Promise<void> {
-  const response = await http<OAuthExchangeResponse>(
-    "/api/auth/oauth/exchange",
-    {
-      method: "POST",
-      body: {
-        provider,
-        exchange_code: exchangeCode,
-      },
-      credentials: "include",
-    }
-  );
-
-  setAccessToken(response.token);
-}
-
-export function logout(): void {
-  clearAccessToken();
-}
-
-/* =========================
-   REGISTRO
-========================= */
-
-export async function registerUser(data: {
-  full_name: string;
-  email: string;
-  password: string;
-  phone?: string;
-}): Promise<void> {
-  await http("/api/public/users/signup", {
-    method: "POST",
-    body: data,
-  });
-}
-
-/* =========================
-   VERIFICAÇÃO DE E-MAIL
-========================= */
-
-export async function verifyEmail(token: string): Promise<void> {
-  try {
-    await http(`/api/public/users/verify-email/${token}`, {
-      method: "POST",
-    });
-  } catch (err: any) {
-    if (err instanceof Error && 'body' in err) {
-      const body = err.body as any;
-
-      if (body?.error?.code) {
-        throw body.error;
-      }
-    }
-
-    throw {
-      code: "email_verification_unknown_error",
-      message: "Erro inesperado ao verificar e-mail.",
-    };
-  }
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/services/auth.ts =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/me.ts =====
-// src/services/me.ts
-
-import { http } from "@/services/http";
-
-export type MeResponse = {
-  user: {
-    email: string;
-  };
-  person: {
-    public_id: string;
-    profile_photo: {
-      url?: string;
-    } | null;
-    contacts: any[];
-    addresses: any[];
-  };
-  animals: {
-    total: number;
-    items: {
-      public_id: string;
-      call_name: string | null;
-      type: string | null;
-      photo: {
-        url?: string;
-      } | null;
-      my_role: string;
-      permissions: {
-        edit: boolean;
-        invite: boolean;
-      };
-      links: {
-        self: string;
-        files: string;
-      };
-    }[];
-    has_more: boolean;
-  };
-  storage: {
-    person_used_bytes: number;
-    animals_used_bytes: number;
-    total_used_bytes: number;
-    by_animal: {
-      total: number;
-      items: any[];
-      has_more: boolean;
-    };
-  };
-  alerts: {
-    decisions: {
-      pending: any[];
-      resolved: any[];
-    };
-    communications: {
-      unread: any[];
-      acknowledged: any[];
-    };
-  };
-};
-
-/**
- * Carrega o contexto do usuário autenticado
- */
-export async function fetchMe(): Promise<MeResponse> {
-  return http<MeResponse>("/api/v1/me", {
-    method: "GET",
-    credentials: "include",
-  });
-}
-
-===== END FILE: /var/www/GSA/animal/frontend/src/services/me.ts =====
-
-===== BEGIN FILE: /var/www/GSA/animal/frontend/src/stores/auth.ts =====
-// /var/www/GSA/animal/frontend/src/stores/auth.ts
-
-let accessToken: string | null = null;
-
-export function setAccessToken(token: string): void {
-  accessToken = token;
-}
-
-export function getAccessToken(): string | null {
-  return accessToken;
-}
-
-export function clearAccessToken(): void {
-  accessToken = null;
-}
-
-
-===== END FILE: /var/www/GSA/animal/frontend/src/stores/auth.ts =====
-
 ===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/api.ts =====
 // src/services/api.ts
 
@@ -519,22 +69,47 @@ export class HttpError extends Error {
   }
 }
 
-async function refreshToken(): Promise<string | null> {
-  const response = await fetch(`${ENV.API_BASE_URL}/api/token/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
+/**
+ * =========================
+ * Refresh token mutex
+ * =========================
+ */
 
-  if (!response.ok) {
-    clearAccessToken();
-    return null;
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const response = await fetch(
+        `${ENV.API_BASE_URL}/api/token/refresh`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
+
+      if (!response.ok) {
+        clearAccessToken();
+        return null;
+      }
+
+      const data = await response.json();
+      setAccessToken(data.token);
+
+      return data.token;
+    })().finally(() => {
+      refreshPromise = null;
+    });
   }
 
-  const data = await response.json();
-  setAccessToken(data.token);
-
-  return data.token;
+  return refreshPromise;
 }
+
+/**
+ * =========================
+ * HTTP client
+ * =========================
+ */
 
 export async function http<T>(
   path: string,
@@ -562,7 +137,7 @@ export async function http<T>(
     credentials: options.credentials ?? "include",
   });
 
-  // 🔴 401: só tenta refresh se NÃO for upload
+  // 401 → tenta refresh UMA VEZ, coordenado por mutex
   if (response.status === 401 && retry && !isFormData) {
     const newToken = await refreshToken();
 
@@ -573,7 +148,6 @@ export async function http<T>(
     return http<T>(path, options, false);
   }
 
-  // ❌ Erros definitivos
   if (!response.ok) {
     let errorBody: unknown = null;
     try {
@@ -582,7 +156,6 @@ export async function http<T>(
     throw new HttpError(response.status, errorBody);
   }
 
-  // 204 sem conteúdo
   if (response.status === 204) {
     return null as T;
   }
@@ -590,4 +163,436 @@ export async function http<T>(
   return (await response.json()) as T;
 }
 
+
 ===== END FILE: /var/www/GSA/animal/frontend/src/services/http.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/medications/page.tsx =====
+// src/app/(protected)/dashboard/animals/[animalId]/clinic/medications/page.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { AnimalMedicationForm } from "@/components/animals/clinic/AnimalMedicationForm";
+import {
+  getAnimalMedications,
+  AnimalMedicationItem,
+} from "@/services/animalMedications";
+
+export default function AnimalClinicMedicationsPage() {
+  const { animalId } = useParams<{ animalId: string }>();
+
+  const [items, setItems] = useState<AnimalMedicationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!animalId) return;
+
+    getAnimalMedications(animalId)
+      .then((res) => setItems(res.items))
+      .catch(() => setError("Erro ao carregar medicações."))
+      .finally(() => setLoading(false));
+  }, [animalId]);
+
+  async function reload() {
+    if (!animalId) return;
+    const res = await getAnimalMedications(animalId);
+    setItems(res.items);
+  }
+
+  if (loading) {
+    return <p className="text-sm text-zinc-500">Carregando medicações…</p>;
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-600">{error}</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* TOPO */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-zinc-900">
+          Medicações
+        </h2>
+
+        <button
+          type="button"
+          onClick={() => setShowForm((v) => !v)}
+          className="text-sm font-medium text-zinc-700 hover:underline"
+        >
+          + Registrar medicação
+        </button>
+      </div>
+
+      {/* FORMULÁRIO */}
+      {showForm && (
+        <AnimalMedicationForm
+          animalId={animalId}
+          onCancel={() => setShowForm(false)}
+          onSaved={async () => {
+            setShowForm(false);
+            await reload();
+          }}
+        />
+      )}
+
+      {/* LISTA */}
+      {items.length === 0 && (
+        <p className="text-sm text-zinc-500">
+          Nenhuma medicação registrada para este animal.
+        </p>
+      )}
+
+      {items.map((item) => {
+        const expanded = expandedId === item.id;
+
+        return (
+          <div
+            key={item.id}
+            className="rounded-lg border bg-white px-4 py-3 space-y-2"
+          >
+            {/* RESUMO */}
+            <button
+              type="button"
+              onClick={() =>
+                setExpandedId(expanded ? null : item.id)
+              }
+              className="w-full text-left flex justify-between items-center"
+            >
+              <div>
+                <p className="font-medium text-zinc-900">
+                  {item.medication.label}
+                  {item.commercial_name && (
+                    <span className="text-sm text-zinc-600">
+                      {" "}
+                      — {item.commercial_name}
+                    </span>
+                  )}
+                </p>
+
+                <p className="text-xs text-zinc-500">
+                  Aplicado em{" "}
+                  {new Date(item.applied_at).toLocaleString()}
+                </p>
+              </div>
+
+              <span className="text-zinc-400 text-sm">
+                {expanded ? "▲" : "▼"}
+              </span>
+            </button>
+
+            {/* DETALHES */}
+            {expanded && (
+              <div className="pt-2 border-t space-y-2 text-sm text-zinc-700">
+                {item.manufacturer && (
+                  <div>
+                    <span className="font-medium">
+                      Fabricante:
+                    </span>{" "}
+                    {item.manufacturer}
+                  </div>
+                )}
+
+                {item.dosage && (
+                  <div>
+                    <span className="font-medium">
+                      Dosagem:
+                    </span>{" "}
+                    {item.dosage}
+                  </div>
+                )}
+
+                {item.notes && (
+                  <div>
+                    <span className="font-medium">
+                      Observações:
+                    </span>{" "}
+                    {item.notes}
+                  </div>
+                )}
+
+                {item.recorded_by && (
+                  <div className="text-xs text-zinc-500 pt-1">
+                    Registrado por{" "}
+                    <span className="font-medium">
+                      {item.recorded_by.name}
+                    </span>
+                  </div>
+                )}
+
+                {/* AÇÕES FUTURAS */}
+                <div className="flex gap-3 pt-2 text-xs">
+                  <button
+                    type="button"
+                    disabled
+                    className="text-zinc-400 cursor-not-allowed"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="text-zinc-400 cursor-not-allowed"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/medications/page.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/animals/clinic/AnimalMedicationForm.tsx =====
+// src/components/animals/clinic/AnimalMedicationForm.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  getMedicationCatalog,
+  MedicationCatalogItem,
+} from "@/services/medicationCatalog";
+import { createAnimalMedication } from "@/services/animalMedications";
+
+type Props = {
+  animalId: string;
+  onSaved(): Promise<void>;
+  onCancel(): void;
+};
+
+const HOURS = Array.from({ length: 24 }).map((_, h) =>
+  `${String(h).padStart(2, "0")}:00`
+);
+
+export function AnimalMedicationForm({
+  animalId,
+  onSaved,
+  onCancel,
+}: Props) {
+  const [catalog, setCatalog] = useState<MedicationCatalogItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [medicationId, setMedicationId] = useState<number | "">("");
+  const [date, setDate] = useState("");
+  const [hour, setHour] = useState("");
+  const [dosage, setDosage] = useState("");
+  const [commercialName, setCommercialName] = useState("");
+  const [manufacturer, setManufacturer] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    getMedicationCatalog()
+      .then((res) => setCatalog(res.items))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function buildAppliedAt(): string | null {
+    if (!date || !hour) return null;
+    return new Date(`${date}T${hour}:00`).toISOString();
+  }
+
+  async function handleSubmit() {
+    setError(null);
+
+    if (!medicationId) {
+      setError("Selecione a medicação.");
+      return;
+    }
+
+    if (!date) {
+      setError("Informe a data da aplicação.");
+      return;
+    }
+
+    if (!hour) {
+      setError("Informe a hora da aplicação.");
+      return;
+    }
+
+    const appliedAt = buildAppliedAt();
+    if (!appliedAt) {
+      setError("Data ou hora inválida.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      await createAnimalMedication(animalId, {
+        medication_id: medicationId,
+        applied_at: appliedAt,
+        dosage: dosage || undefined,
+        notes: notes || undefined,
+        commercialName: commercialName || undefined,
+        manufacturer: manufacturer || undefined,
+      });
+
+      await onSaved();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <p className="text-sm text-zinc-500">
+        Carregando catálogo de medicações…
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-white p-4 space-y-4">
+      {error && (
+        <div className="text-sm text-red-600 font-medium">
+          {error}
+        </div>
+      )}
+
+      {/* MEDICAÇÃO */}
+      <div>
+        <label className="block text-xs font-medium text-zinc-600">
+          Tipo de medicação
+        </label>
+        <select
+          value={medicationId}
+          onChange={(e) =>
+            setMedicationId(
+              e.target.value ? Number(e.target.value) : ""
+            )
+          }
+          className="w-full rounded border px-3 py-2 text-sm"
+        >
+          <option value="">Selecione…</option>
+          {catalog.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* NOME COMERCIAL */}
+      <div>
+        <label className="block text-xs font-medium text-zinc-600">
+          Nome comercial do medicamento
+        </label>
+        <input
+          type="text"
+          value={commercialName}
+          onChange={(e) => setCommercialName(e.target.value)}
+          className="w-full rounded border px-3 py-2 text-sm"
+          placeholder="Ex: Apoquel"
+        />
+      </div>
+
+      {/* FABRICANTE */}
+      <div>
+        <label className="block text-xs font-medium text-zinc-600">
+          Fabricante
+        </label>
+        <input
+          type="text"
+          value={manufacturer}
+          onChange={(e) => setManufacturer(e.target.value)}
+          className="w-full rounded border px-3 py-2 text-sm"
+          placeholder="Ex: Zoetis"
+        />
+      </div>
+
+      {/* DOSAGEM */}
+      <div>
+        <label className="block text-xs font-medium text-zinc-600">
+          Dosagem administrada
+        </label>
+        <input
+          type="text"
+          value={dosage}
+          onChange={(e) => setDosage(e.target.value)}
+          className="w-full rounded border px-3 py-2 text-sm"
+          placeholder="Ex: 5 mg, 1 comprimido"
+        />
+      </div>
+
+      {/* DATA + HORA */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-zinc-600">
+            Data da aplicação
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full rounded border px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-zinc-600">
+            Hora
+          </label>
+          <select
+            value={hour}
+            onChange={(e) => setHour(e.target.value)}
+            className="w-full rounded border px-3 py-2 text-sm"
+          >
+            <option value="">Selecione…</option>
+            {HOURS.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* OBS */}
+      <div>
+        <label className="block text-xs font-medium text-zinc-600">
+          Observações
+        </label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="w-full rounded border px-3 py-2 text-sm"
+        />
+      </div>
+
+      {/* AÇÕES */}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-sm"
+        >
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          disabled={submitting}
+          onClick={handleSubmit}
+          className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+        >
+          {submitting ? "Salvando…" : "Salvar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/animals/clinic/AnimalMedicationForm.tsx =====

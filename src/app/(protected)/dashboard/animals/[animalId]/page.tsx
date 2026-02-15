@@ -9,6 +9,9 @@ import { AnimalParentsForm } from "@/components/animals/AnimalParentsForm";
 import { AnimalPhotoBlock } from "@/components/animals/AnimalPhotoBlock";
 import { CopyId } from "@/components/dashboard/CopyId";
 import { revokeTutorFromAnimal } from "@/services/animalTutors";
+import { AnimalSectionMenu } from "@/components/animals/AnimalSectionMenu";
+
+
 type RawAnimal = any;
 export default function AnimalPage() {
   const params = useParams();
@@ -178,6 +181,12 @@ export default function AnimalPage() {
             </div>
           )}
       </section>
+
+      {/* MENU */}
+      <AnimalSectionMenu animalId={animal.public_id} />
+
+
+
       <AnimalBasicForm
         publicId={animal.public_id}
         initialData={animal}

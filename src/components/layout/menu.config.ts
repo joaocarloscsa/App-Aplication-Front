@@ -39,6 +39,23 @@ export const MENU_ITEMS: MenuItem[] = [
     key: "clinic",
     label: "Clínica",
     href: "/dashboard/clinica",
+    children: [
+      {
+        key: "clinic-medications",
+        label: "Medicações",
+        href: "/dashboard/clinica/medicamentos",
+      },
+      {
+        key: "clinic-vaccination",
+        label: "Vacinação",
+        href: "/dashboard/clinica/vacinacao",
+      },
+      {
+        key: "clinic-history",
+        label: "Histórico",
+        href: "/dashboard/clinica/historico",
+      },
+    ],
   },
   {
     key: "uploads",

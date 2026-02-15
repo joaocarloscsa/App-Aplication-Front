@@ -12,25 +12,31 @@ type SideMenuProps = {
 export function SideMenu({ mobile = false }: SideMenuProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   function isActive(href?: string) {
-  if (!href) return false;
+    if (!href) return false;
 
-  // Dashboard: só ativo na rota exata
-  if (href === "/dashboard") {
-    return pathname === "/dashboard";
+    if (href === "/dashboard") {
+      return pathname === "/dashboard";
+    }
+
+    return pathname === href || pathname.startsWith(href + "/");
   }
-
-  // Demais menus
-  return pathname === href || pathname.startsWith(href + "/");
-}
 
   function renderItem(item: MenuItem, level = 0) {
     const active = isActive(item.href);
-    const showChildren = active && item.children?.length;
+
+    const showChildren =
+      item.children?.length &&
+      (active || hoveredKey === item.key);
 
     return (
-      <div key={item.key}>
+      <div
+        key={item.key}
+        onMouseEnter={() => !mobile && setHoveredKey(item.key)}
+        onMouseLeave={() => !mobile && setHoveredKey(null)}
+      >
         {item.href && (
           <Link
             href={item.href}
@@ -43,7 +49,6 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
                 : "text-zinc-600 hover:text-zinc-900",
             ].join(" ")}
           >
-            {/* Indicador ativo */}
             <span className="w-4 text-xs">
               {active ? "🐾" : ""}
             </span>
@@ -102,4 +107,3 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
     </>
   );
 }
-
