@@ -1,0 +1,716 @@
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/agenda/page.tsx =====
+// path: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/agenda/page.tsx
+
+"use client";
+
+import { useMemo, useState } from "react";
+import type { Task } from "@/mock/tasks";
+import { mockTasks } from "@/mock/tasks";
+import { filterTasksByView, formatPeriodLabel } from "@/utils/tasks-time-filter";
+import { AgendaViewSwitcher } from "@/components/agenda/AgendaViewSwitcher";
+import { TaskCard } from "@/components/agenda/TaskCard";
+
+export default function AgendaPage() {
+  const [view, setView] = useState<"day" | "week" | "month">("day");
+  const [referenceDate] = useState(new Date());
+  const [tasks, setTasks] = useState<Task[]>(mockTasks);
+
+  const periodLabel = useMemo(
+    () => formatPeriodLabel(view, referenceDate),
+    [view, referenceDate]
+  );
+
+  const visible = useMemo(
+    () => filterTasksByView(tasks, view, referenceDate),
+    [tasks, view, referenceDate]
+  );
+
+  return (
+    <section className="space-y-4">
+      <header className="flex items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-zinc-900">
+            Agenda
+          </h1>
+          <p className="text-xs text-zinc-500">
+            {periodLabel}
+          </p>
+        </div>
+
+        <AgendaViewSwitcher value={view} onChange={setView} />
+      </header>
+
+      {visible.length === 0 && (
+        <p className="text-sm text-zinc-500">
+          Nenhuma tarefa neste período.
+        </p>
+      )}
+
+      <ul className="space-y-2">
+        {visible.map((task) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            onChange={(next) => {
+              setTasks((prev) =>
+                prev.map((t) => (t.id === next.id ? next : t))
+              );
+            }}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/agenda/page.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx =====
+// path: /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx
+
+"use client";
+
+import type { Task } from "@/mock/tasks";
+import {
+  cancel,
+  isDueSoon,
+  markDone,
+  reopen,
+  statusBadgeClasses,
+  statusLabel,
+} from "@/utils/task-actions";
+
+type Props = {
+  task: Task;
+  onChange(next: Task): void;
+};
+
+function askComment(label: string): string | null {
+  const v = prompt(label);
+  if (v === null) return null; // cancelou prompt
+  const trimmed = v.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function TaskCard({ task, onChange }: Props) {
+  const dueSoon = isDueSoon(task, 12);
+
+  const canMarkDone = task.status === "PLANNED";
+  const canReopen = task.status !== "PLANNED";
+  const canCancel = task.status === "PLANNED";
+
+  return (
+    <li className="rounded-md border bg-white px-4 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-zinc-900 truncate">
+              {task.title}
+            </p>
+
+            <span
+              className={[
+                "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                statusBadgeClasses(task.status),
+              ].join(" ")}
+            >
+              {statusLabel(task.status)}
+            </span>
+
+            {dueSoon && (
+              <span className="inline-flex items-center rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium">
+                alerta (≤ 12h)
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-zinc-500">
+            {new Date(task.scheduled_at).toLocaleString()}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={!canMarkDone}
+            onClick={() => {
+              const comment = askComment("Comentário (opcional) para marcar como feita:");
+              if (comment === null) return;
+              onChange(markDone(task, comment));
+            }}
+            className={[
+              "text-xs rounded-md px-3 py-1.5 border transition-colors",
+              canMarkDone
+                ? "border-green-200 text-green-700 hover:bg-green-50"
+                : "border-zinc-200 text-zinc-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            Feita
+          </button>
+
+          <button
+            type="button"
+            disabled={!canReopen}
+            onClick={() => {
+              const comment = askComment("Comentário (opcional) para reabrir:");
+              if (comment === null) return;
+              onChange(reopen(task, comment));
+            }}
+            className={[
+              "text-xs rounded-md px-3 py-1.5 border transition-colors",
+              canReopen
+                ? "border-amber-200 text-amber-800 hover:bg-amber-50"
+                : "border-zinc-200 text-zinc-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            Reabrir
+          </button>
+
+          <button
+            type="button"
+            disabled={!canCancel}
+            onClick={() => {
+              const ok = confirm("Cancelar esta tarefa?");
+              if (!ok) return;
+              const comment = askComment("Motivo/observação (opcional) do cancelamento:");
+              if (comment === null) return;
+              onChange(cancel(task, comment));
+            }}
+            className={[
+              "text-xs rounded-md px-3 py-1.5 border transition-colors",
+              canCancel
+                ? "border-red-200 text-red-700 hover:bg-red-50"
+                : "border-zinc-200 text-zinc-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+
+      {task.actions?.length > 0 && (
+        <details className="pt-1">
+          <summary className="text-xs text-zinc-600 cursor-pointer select-none">
+            Histórico ({task.actions.length})
+          </summary>
+
+          <ul className="mt-2 space-y-1 text-xs text-zinc-600">
+            {task.actions
+              .slice()
+              .reverse()
+              .map((a, idx) => (
+                <li key={idx} className="flex gap-2">
+                  <span className="font-mono text-zinc-500">
+                    {new Date(a.at).toLocaleString()}
+                  </span>
+                  <span className="font-medium">{a.type}</span>
+                  {a.comment ? (
+                    <span className="text-zinc-700">— {a.comment}</span>
+                  ) : null}
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
+    </li>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/utils/task-actions.ts =====
+// path: /var/www/GSA/animal/frontend/src/utils/task-actions.ts
+
+import type { Task, TaskActionLog, TaskStatus } from "@/mock/tasks";
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function appendAction(task: Task, action: TaskActionLog): Task {
+  return {
+    ...task,
+    actions: [...(task.actions ?? []), action],
+  };
+}
+
+export function markDone(task: Task, comment?: string | null): Task {
+  if (task.status === "done") return task;
+
+  const next: Task = {
+    ...task,
+    status: "done",
+  };
+
+  return appendAction(next, {
+    type: "marked_done",
+    at: nowIso(),
+    comment: comment ?? null,
+  });
+}
+
+export function reopen(task: Task, comment?: string | null): Task {
+  if (task.status === "PLANNED") return task;
+
+  const next: Task = {
+    ...task,
+    status: "PLANNED",
+  };
+
+  return appendAction(next, {
+    type: "reopened",
+    at: nowIso(),
+    comment: comment ?? null,
+  });
+}
+
+export function cancel(task: Task, comment?: string | null): Task {
+  if (task.status === "canceled") return task;
+
+  const next: Task = {
+    ...task,
+    status: "canceled",
+  };
+
+  return appendAction(next, {
+    type: "canceled",
+    at: nowIso(),
+    comment: comment ?? null,
+  });
+}
+
+export function statusLabel(status: TaskStatus): string {
+  if (status === "PLANNED") return "Pendente";
+  if (status === "done") return "Feita";
+  return "Cancelada";
+}
+
+export function statusBadgeClasses(status: TaskStatus): string {
+  if (status === "PLANNED") return "bg-amber-100 text-amber-800";
+  if (status === "done") return "bg-green-100 text-green-800";
+  return "bg-zinc-100 text-zinc-700";
+}
+
+export function isDueSoon(task: Task, hours = 12): boolean {
+  if (task.status !== "PLANNED") return false;
+
+  const now = Date.now();
+  const due = new Date(task.scheduled_at).getTime();
+  const diffMs = due - now;
+
+  if (diffMs < 0) return false;
+  return diffMs <= hours * 60 * 60 * 1000;
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/utils/task-actions.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/utils/tasks-time-filter.ts =====
+// path: /var/www/GSA/animal/frontend/src/utils/tasks-time-filter.ts
+
+import type { Task } from "@/mock/tasks";
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+}
+
+export function filterTasksByView(
+  tasks: Task[],
+  view: "day" | "week" | "month",
+  reference: Date
+) {
+  const ref = new Date(reference);
+
+  let from: Date;
+  let to: Date;
+
+  if (view === "day") {
+    from = startOfDay(ref);
+    to = endOfDay(ref);
+  } else if (view === "week") {
+    const day = ref.getDay(); // 0..6 (domingo..sábado)
+    const start = new Date(ref);
+    start.setDate(ref.getDate() - day);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    from = startOfDay(start);
+    to = endOfDay(end);
+  } else {
+    from = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    to = endOfDay(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+  }
+
+  return tasks.filter((t) => {
+    const d = new Date(t.scheduled_at);
+    return d >= from && d <= to;
+  });
+}
+
+export function formatPeriodLabel(
+  view: "day" | "week" | "month",
+  reference: Date
+): string {
+  const ref = new Date(reference);
+
+  if (view === "day") {
+    return ref.toLocaleDateString();
+  }
+
+  if (view === "week") {
+    const day = ref.getDay();
+    const start = new Date(ref);
+    start.setDate(ref.getDate() - day);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    return `${start.toLocaleDateString()} — ${end.toLocaleDateString()}`;
+  }
+
+  return ref.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/utils/tasks-time-filter.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/utils/tasks-alerts.ts =====
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+const today = startOfDay(new Date());
+
+function diffInDays(a: Date, b: Date) {
+  const ms =
+    startOfDay(a).getTime() - startOfDay(b).getTime();
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
+}
+
+export function getAlertLevel(task: {
+  scheduled_at: string;
+  status: string;
+}) {
+  if (task.status !== "PLANNED") return null;
+
+  const taskDate = new Date(task.scheduled_at);
+  const daysDiff = diffInDays(taskDate, today);
+
+  if (daysDiff < 0) return "overdue";
+  if (daysDiff === 0) return "today";
+  if (daysDiff === 1) return "tomorrow";
+  return null;
+}
+
+export function summarizeAlerts(tasks: any[]) {
+  return tasks.reduce(
+    (acc, task) => {
+      const level = getAlertLevel(task);
+      if (!level) return acc;
+      acc[level]++;
+      return acc;
+    },
+    { overdue: 0, today: 0, tomorrow: 0 }
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/utils/tasks-alerts.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/tasks/TasksAlertSummary.tsx =====
+"use client";
+
+type Task = {
+  id: number;
+  title: string;
+  scheduled_at: string;
+  status: "PLANNED" | "done" | "canceled";
+};
+
+type Props = {
+  tasks: Task[];
+  onClick?: () => void;
+};
+
+import { summarizeAlerts } from "@/utils/tasks-alerts";
+
+export function TasksAlertSummary({ tasks, onClick }: Props) {
+  const alerts = summarizeAlerts(tasks);
+
+  if (
+    alerts.overdue === 0 &&
+    alerts.today === 0 &&
+    alerts.tomorrow === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      onClick={onClick}
+      className="cursor-pointer rounded-lg border bg-white px-4 py-3 space-y-1 hover:bg-zinc-50"
+    >
+      <h3 className="text-sm font-semibold text-zinc-900">
+        Tarefas pendentes
+      </h3>
+
+      {alerts.overdue > 0 && (
+        <div className="text-sm text-red-700">
+          ⚠️ {alerts.overdue} atrasada(s)
+        </div>
+      )}
+
+      {alerts.today > 0 && (
+        <div className="text-sm text-yellow-700">
+          🕒 {alerts.today} para hoje
+        </div>
+      )}
+
+      {alerts.tomorrow > 0 && (
+        <div className="text-sm text-blue-700">
+          📅 {alerts.tomorrow} para amanhã
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/tasks/TasksAlertSummary.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/page.tsx =====
+"use client";
+
+import { TasksAlertSummary } from "@/components/tasks/TasksAlertSummary";
+import { useRouter } from "next/navigation";
+
+import { UserCard,StorageCard,AnimalsCard} from "@/components/dashboard";
+
+
+const mockTasks = [
+  {
+    id: 1,
+    title: "Dar banho",
+    scheduled_at: "2026-02-15T10:00:00Z",
+    status: "PLANNED",
+  },
+  {
+    id: 2,
+    title: "Trocar coleira",
+    scheduled_at: "2026-02-14T10:00:00Z",
+    status: "PLANNED",
+  },
+];
+
+export default function DashboardPage() {
+  const router = useRouter();
+
+  return (    <div className="space-y-4">
+      <section className="mx-auto max-w-7xl px-4 py-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <UserCard />
+        <StorageCard />
+        <AnimalsCard />
+      </div>
+    </section>
+      <TasksAlertSummary
+        tasks={mockTasks}
+        onClick={() =>
+          router.push("/dashboard/agenda")
+        }
+      />
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/page.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/animalTasks.ts =====
+// src/services/animalTasks.ts
+
+import { apiFetch } from "./api";
+
+/* =======================
+ * Types
+ * ======================= */
+
+export type AnimalTaskItem = {
+  id: number;
+  title: string;
+  status: string;
+  scheduled_at: string | null;
+  created_at: string;
+  created_by: {
+    person_public_id: string;
+    name: string;
+  };
+  last_action: {
+    type: string;
+    by: {
+      person_public_id: string;
+      name: string;
+    };
+    at: string;
+    comment?: string | null;
+  } | null;
+};
+
+/* =======================
+ * READ
+ * ======================= */
+
+export async function getAnimalTasks(
+  animalId: string,
+  params?: {
+    from?: string;
+    to?: string;
+    status?: string;
+  }
+): Promise<{ items: AnimalTaskItem[] }> {
+  const qs = new URLSearchParams(params as any).toString();
+
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks${qs ? `?${qs}` : ""}`
+  );
+}
+
+/* =======================
+ * CREATE
+ * ======================= */
+
+export async function createAnimalTask(
+  animalId: string,
+  payload: {
+    title: string;
+    scheduled_at: string;
+  }
+): Promise<{ id: number }> {
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/* =======================
+ * ACTIONS
+ * ======================= */
+
+export async function markTaskDone(
+  animalId: string,
+  taskId: number,
+  comment?: string
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/done`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+export async function reopenTask(
+  animalId: string,
+  taskId: number,
+  comment?: string
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/reopen`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+export async function cancelTask(
+  animalId: string,
+  taskId: number,
+  comment?: string
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/cancel`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/services/animalTasks.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/lib/env.ts =====
+// /var/www/GSA/animal/frontend/src/lib/env.ts
+export const ENV = {
+  API_BASE_URL:
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    "http://127.0.0.1:8000"
+};
+
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/lib/env.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/api.ts =====
+// src/services/api.ts
+
+import { ENV } from "@/lib/env";
+import { getAccessToken } from "@/stores/auth";
+
+type ApiOptions = RequestInit & {
+  auth?: boolean;
+};
+
+export async function apiFetch(
+  path: string,
+  options: ApiOptions = {}
+) {
+  const token = getAccessToken();
+
+  const headers = new Headers(options.headers || {});
+  headers.set("Accept", "application/json");
+
+  if (options.auth !== false && token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${ENV.API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/services/api.ts =====

@@ -1,4 +1,4 @@
-// src/services/api.ts
+// path: src/services/api.ts
 
 import { ENV } from "@/lib/env";
 import { getAccessToken } from "@/stores/auth";
@@ -27,10 +27,31 @@ export async function apiFetch(
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    // tenta extrair erro JSON, se existir
+    let message = `HTTP ${res.status}`;
+
+    try {
+      const text = await res.text();
+      if (text) {
+        message = text;
+      }
+    } catch {
+      // ignora
+    }
+
+    throw new Error(message);
   }
 
-  return res.json();
-}
+  // ✅ 204 = sem corpo
+  if (res.status === 204) {
+    return null;
+  }
 
+  // proteção extra: corpo vazio
+  const text = await res.text();
+  if (!text) {
+    return null;
+  }
+
+  return JSON.parse(text);
+}

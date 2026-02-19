@@ -1,0 +1,72 @@
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx =====
+// src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx
+
+/**
+ * PÁGINA: Agenda do Animal
+ *
+ * FINALIDADE
+ * ----------
+ * Esta página concentra TUDO que é execução no tempo relacionada ao animal.
+ * Ela é operacional, mutável e focada no dia a dia.
+ *
+ * O que ENTRA aqui:
+ * - Tarefas (ex: dar medicação)
+ * - Eventos (cio, exposições, óbito, etc.)
+ * - Compromissos (consultas marcadas)
+ * - Histórico de execução (feito / não feito / atrasado)
+ *
+ * O que NÃO entra aqui:
+ * - Definição de tratamento
+ * - Definição de medicação
+ * - Histórico clínico médico
+ *
+ * RELAÇÃO COM CLÍNICA
+ * ------------------
+ * - Clínica DEFINE tratamentos e medicações
+ * - Agenda EXECUTA essas definições
+ * - Agenda pode mostrar origem da tarefa (ex: tratamento X)
+ *
+ * IMPLEMENTAÇÃO FUTURA
+ * --------------------
+ * - Visão por dia / semana
+ * - Filtros por tipo (tarefa, evento, compromisso)
+ * - Marcação de execução
+ * - Registro de quem executou (tutor)
+ *
+ * IMPORTANTE
+ * ----------
+ * - Agenda é mutável
+ * - Agenda registra ação humana
+ * - Agenda é auditável
+ */
+
+// src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx
+
+"use client";
+
+import { useParams } from "next/navigation";
+import { AnimalSectionMenu } from "@/components/animals/AnimalSectionMenu";
+
+export default function AnimalAgendaPage() {
+  const { animalId } = useParams<{ animalId: string }>();
+
+  return (
+    <section className="space-y-6">
+      <AnimalSectionMenu animalId={animalId} />
+
+      <div>
+        <h1 className="text-xl font-semibold">
+          Agenda do animal
+        </h1>
+
+        <p className="text-sm text-zinc-600">
+          Tarefas, eventos e compromissos relacionados a este animal.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx =====

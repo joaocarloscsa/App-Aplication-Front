@@ -20,10 +20,18 @@ export const MENU_ITEMS: MenuItem[] = [
     href: "/dashboard/profile",
   },
   {
-    key: "animals",
-    label: "Animais",
-    href: "/dashboard/animals",
-  },
+  key: "animals",
+  label: "Animais",
+  href: "/dashboard/animals",
+  children: [
+    {
+      key: "animals-new",
+      label: "Novo animal",
+      href: "/dashboard/animals/new",
+    },
+  ],
+},
+
   {
     key: "agenda",
     label: "Agenda",

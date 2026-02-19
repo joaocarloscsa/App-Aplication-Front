@@ -1,0 +1,5818 @@
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Agenda/AgendaOccurrenceGenerator.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Agenda/AgendaOccurrenceGenerator.php
+
+namespace App\Application\Agenda;
+
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AgendaRecurrenceRule;
+
+/**
+ * Gera ocorrências temporais de itens de agenda (tarefas, eventos, agendamentos)
+ * dentro de uma janela de tempo finita.
+ *
+ * ⚠️ Regra crítica:
+ * - Nada é materializado no banco.
+ * - Tudo é calculado sob demanda.
+ * - Recorrência só existe enquanto regra + item existirem.
+ */
+final class AgendaOccurrenceGenerator
+{
+    /**
+     * @return array<int, array{
+     *   item: AnimalAgendaItem,
+     *   startsAt: \DateTimeImmutable,
+     *   endsAt: \DateTimeImmutable|null
+     * }>
+     */
+    public function generate(
+        AnimalAgendaItem $item,
+        ?AgendaRecurrenceRule $rule,
+        \DateTimeImmutable $from,
+        \DateTimeImmutable $to
+    ): array {
+        // Item sem data não participa da agenda temporal
+        if (!$item->getStartsAt()) {
+            return [];
+        }
+
+        // Sem recorrência → ocorrência única
+        if ($rule === null) {
+            if ($item->getStartsAt() < $from || $item->getStartsAt() > $to) {
+                return [];
+            }
+
+            return [[
+                'item' => $item,
+                'startsAt' => $item->getStartsAt(),
+                'endsAt' => $item->getEndsAt(),
+            ]];
+        }
+
+        return $this->generateRecurring(
+            item: $item,
+            rule: $rule,
+            from: $from,
+            to: $to
+        );
+    }
+
+    /**
+     * @return array<int, array{
+     *   item: AnimalAgendaItem,
+     *   startsAt: \DateTimeImmutable,
+     *   endsAt: \DateTimeImmutable|null
+     * }>
+     */
+    private function generateRecurring(
+        AnimalAgendaItem $item,
+        AgendaRecurrenceRule $rule,
+        \DateTimeImmutable $from,
+        \DateTimeImmutable $to
+    ): array {
+        $occurrences = [];
+
+        $cursor = $item->getStartsAt();
+        $endsAt = $item->getEndsAt();
+        $until = $rule->getUntil();
+
+        // Avança cursor até entrar na janela
+        while ($cursor < $from) {
+            $cursor = $this->advance($cursor, $rule);
+        }
+
+        while ($cursor <= $to) {
+            if ($until && $cursor > $until) {
+                break;
+            }
+
+            $occurrences[] = [
+                'item' => $item,
+                'startsAt' => $cursor,
+                'endsAt' => $endsAt
+                    ? $this->shiftEnd($item->getStartsAt(), $endsAt, $cursor)
+                    : null,
+            ];
+
+            $cursor = $this->advance($cursor, $rule);
+        }
+
+        return $occurrences;
+    }
+
+    private function advance(
+        \DateTimeImmutable $date,
+        AgendaRecurrenceRule $rule
+    ): \DateTimeImmutable {
+        $value = $rule->getIntervalValue();
+        $unit = $rule->getIntervalUnit();
+
+        return match ($unit) {
+            'day' => $date->modify("+{$value} days"),
+            'week' => $date->modify("+{$value} weeks"),
+            'month' => $date->modify("+{$value} months"),
+            'year' => $date->modify("+{$value} years"),
+            default => throw new \DomainException('invalid_recurrence_unit'),
+        };
+    }
+
+    private function shiftEnd(
+        \DateTimeImmutable $originalStart,
+        \DateTimeImmutable $originalEnd,
+        \DateTimeImmutable $newStart
+    ): \DateTimeImmutable {
+        $duration = $originalEnd->getTimestamp() - $originalStart->getTimestamp();
+        return $newStart->modify("+{$duration} seconds");
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Agenda/AgendaOccurrenceGenerator.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Agenda/AgendaTimeWindow.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Agenda/AgendaTimeWindow.php
+
+namespace App\Application\Agenda;
+
+final class AgendaTimeWindow
+{
+    public static function resolve(
+        string $view,
+        \DateTimeImmutable $ref
+    ): array {
+        return match ($view) {
+            'day' => [
+                self::startOfDay($ref),
+                self::endOfDay($ref),
+            ],
+            'week' => self::week($ref),
+            'month' => self::month($ref),
+            'year' => self::year($ref),
+            default => throw new \InvalidArgumentException('invalid_view'),
+        };
+    }
+
+    private static function startOfDay(\DateTimeImmutable $d): \DateTimeImmutable
+    {
+        return $d->setTime(0, 0);
+    }
+
+    private static function endOfDay(\DateTimeImmutable $d): \DateTimeImmutable
+    {
+        return $d->setTime(23, 59, 59);
+    }
+
+    private static function week(\DateTimeImmutable $d): array
+    {
+        $start = $d->modify('monday this week')->setTime(0, 0);
+        $end = $start->modify('+6 days')->setTime(23, 59, 59);
+        return [$start, $end];
+    }
+
+    private static function month(\DateTimeImmutable $d): array
+    {
+        $start = $d->modify('first day of this month')->setTime(0, 0);
+        $end = $d->modify('last day of this month')->setTime(23, 59, 59);
+        return [$start, $end];
+    }
+
+    private static function year(\DateTimeImmutable $d): array
+    {
+        $start = $d->setDate((int)$d->format('Y'), 1, 1)->setTime(0, 0);
+        $end = $d->setDate((int)$d->format('Y'), 12, 31)->setTime(23, 59, 59);
+        return [$start, $end];
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Agenda/AgendaTimeWindow.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/CancelAnimalTaskService.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Animal/Task/CancelAnimalTaskService.php
+
+namespace App\Application\Animal\Task;
+
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use DomainException;
+
+final class CancelAnimalTaskService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {}
+
+    public function cancel(
+        AnimalAgendaItem $task,
+        Person $actor,
+        ?string $comment = null
+    ): void {
+        if ($task->getType() !== 'task') {
+            throw new DomainException('only_tasks_can_be_canceled');
+        }
+
+        if ($task->getStatus() === 'CANCELED') {
+            return;
+        }
+
+        $task->cancel();
+
+        $this->em->persist(
+            AnimalAgendaItemActionLog::canceled(
+                item: $task,
+                actor: $actor,
+                comment: $comment
+            )
+        );
+
+        $this->em->flush();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/CancelAnimalTaskService.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/CreateAnimalTaskService.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Animal/Task/CreateAnimalTaskService.php
+
+namespace App\Application\Animal\Task;
+
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\AnimalAgendaItemRecurrenceRule;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+
+final class CreateAnimalTaskService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em,
+        private readonly GenerateRecurringAnimalTasksService $recurringGenerator
+    ) {}
+
+    public function create(
+        AnimalAgenda $agenda,
+        Person $actor,
+        string $title,
+        \DateTimeImmutable $scheduledAt,
+        ?int $organizationId,
+        int $priority,
+        ?array $recurrence = null
+    ): AnimalAgendaItem {
+        $task = AnimalAgendaItem::createTask(
+            agenda: $agenda,
+            createdBy: $actor,
+            title: $title,
+            scheduledAt: $scheduledAt,
+            organizationId: $organizationId,
+            priority: $priority
+        );
+
+        $this->em->persist($task);
+
+        if ($recurrence) {
+            $rule = new AnimalAgendaItemRecurrenceRule(
+                agendaItem: $task,
+                frequency: strtoupper($recurrence['frequency']),
+                intervalValue: (int) $recurrence['interval'],
+                until: isset($recurrence['until'])
+                    ? new \DateTimeImmutable($recurrence['until'])
+                    : null
+            );
+
+            $task->setRecurrenceRule($rule);
+            $this->em->persist($rule);
+
+            $this->recurringGenerator->generate(
+                agenda: $agenda,
+                baseTask: $task,
+                rule: $rule,
+                actor: $actor,
+                from: $scheduledAt,
+                to: $scheduledAt->modify('+1 year')
+            );
+        }
+
+        $this->em->flush();
+
+        return $task;
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/CreateAnimalTaskService.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/DeleteAnimalTaskService.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Animal/Task/DeleteAnimalTaskService.php
+
+namespace App\Application\Animal\Task;
+
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use DomainException;
+
+final class DeleteAnimalTaskService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {}
+
+    public function delete(
+        AnimalAgendaItem $task,
+        Person $actor
+    ): void {
+        if ($task->getType() !== 'task') {
+            throw new DomainException('only_tasks_can_be_deleted');
+        }
+
+        // Somente o criador pode deletar
+        if ($task->getCreatedBy()->getId() !== $actor->getId()) {
+            throw new DomainException('only_creator_can_delete_task');
+        }
+
+        // Não pode haver interações além da criação
+        $logCount = $this->em->createQueryBuilder()
+            ->select('COUNT(l.id)')
+            ->from(AnimalAgendaItemActionLog::class, 'l')
+            ->where('l.agendaItem = :item')
+            ->andWhere('l.action != :created')
+            ->setParameter('item', $task)
+            ->setParameter('created', 'created')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        if ((int) $logCount > 0) {
+            throw new DomainException('task_has_interactions_and_cannot_be_deleted');
+        }
+
+        $this->em->remove($task);
+        $this->em->flush();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/DeleteAnimalTaskService.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/GenerateRecurringAnimalTasksService.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Animal/Task/GenerateRecurringAnimalTasksService.php
+
+namespace App\Application\Animal\Task;
+
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemRecurrenceRule;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use DomainException;
+
+final class GenerateRecurringAnimalTasksService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {}
+
+    public function generate(
+        AnimalAgenda $agenda,
+        AnimalAgendaItem $baseTask,
+        AnimalAgendaItemRecurrenceRule $rule,
+        Person $actor,
+        \DateTimeImmutable $from,
+        \DateTimeImmutable $to
+    ): void {
+        if ($baseTask->getType() !== 'task') {
+            throw new DomainException('only_tasks_can_be_recurrent');
+        }
+
+        $current = $baseTask->getStartsAt();
+        if (!$current) {
+            return;
+        }
+
+        // Se occurrences existir, a tarefa base já conta como 1 ocorrência.
+        $remaining = $rule->getOccurrences();
+
+        while (true) {
+            // próxima data
+            $current = $this->nextDate($current, $rule);
+
+            if ($current > $to) {
+                break;
+            }
+
+            if ($rule->getUntil() && $current > $rule->getUntil()) {
+                break;
+            }
+
+            // cria ocorrência
+            $task = AnimalAgendaItem::createTask(
+                agenda: $agenda,
+                createdBy: $actor,
+                title: $baseTask->getTitle(),
+                scheduledAt: $current,
+                organizationId: null, // baseTask não expõe getter hoje
+                priority: $baseTask->getPriority()
+            );
+
+            $task->updateDescription($baseTask->getDescription());
+
+            $this->em->persist($task);
+
+            // controla occurrences
+            if ($remaining !== null) {
+                $remaining--;
+                if ($remaining <= 1) { // <=1 porque base já é a primeira
+                    break;
+                }
+            }
+        }
+
+        $this->em->flush();
+    }
+
+    private function nextDate(
+        \DateTimeImmutable $date,
+        AnimalAgendaItemRecurrenceRule $rule
+    ): \DateTimeImmutable {
+        return match ($rule->getFrequency()) {
+            AnimalAgendaItemRecurrenceRule::FREQ_DAILY =>
+                $date->modify('+' . $rule->getIntervalValue() . ' days'),
+
+            AnimalAgendaItemRecurrenceRule::FREQ_WEEKLY =>
+                $date->modify('+' . $rule->getIntervalValue() . ' weeks'),
+
+            AnimalAgendaItemRecurrenceRule::FREQ_MONTHLY =>
+                $this->nextMonthlyDate($date, $rule),
+
+            default => throw new DomainException('invalid_recurrence_frequency'),
+        };
+    }
+
+    private function nextMonthlyDate(
+        \DateTimeImmutable $date,
+        AnimalAgendaItemRecurrenceRule $rule
+    ): \DateTimeImmutable {
+        // Se tiver dayOfMonth, fixa no mesmo dia no próximo mês (ou último dia do mês)
+        if ($rule->getDayOfMonth()) {
+            $next = $date->modify('first day of +' . $rule->getIntervalValue() . ' months');
+
+            $y = (int) $next->format('Y');
+            $m = (int) $next->format('m');
+            $lastDay = (int) $next->format('t');
+            $d = min($rule->getDayOfMonth(), $lastDay);
+
+            return $next->setDate($y, $m, $d);
+        }
+
+        // Senão, soma meses mantendo o dia “natural”
+        return $date->modify('+' . $rule->getIntervalValue() . ' months');
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/GenerateRecurringAnimalTasksService.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/MarkAnimalTaskDoneService.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Animal/Task/MarkAnimalTaskDoneService.php
+
+namespace App\Application\Animal\Task;
+
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use DomainException;
+
+final class MarkAnimalTaskDoneService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {}
+
+    public function markDone(
+        AnimalAgendaItem $task,
+        Person $actor,
+        ?string $comment = null
+    ): void {
+        if ($task->getType() !== 'task') {
+            throw new DomainException('only_tasks_can_be_marked_done');
+        }
+
+        if ($task->getStatus() === 'DONE') {
+            return;
+        }
+
+        $task->markDone();
+
+        $this->em->persist(
+            AnimalAgendaItemActionLog::completed(
+                item: $task,
+                actor: $actor,
+                comment: $comment
+            )
+        );
+
+        $this->em->flush();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/MarkAnimalTaskDoneService.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/ReopenAnimalTaskService.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Application/Animal/Task/ReopenAnimalTaskService.php
+
+namespace App\Application\Animal\Task;
+
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use DomainException;
+
+final class ReopenAnimalTaskService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em
+    ) {}
+
+    public function reopen(
+        AnimalAgendaItem $task,
+        Person $actor,
+        ?string $comment = null
+    ): void {
+        if ($task->getType() !== 'task') {
+            throw new DomainException('only_tasks_can_be_reopened');
+        }
+
+        if ($task->getStatus() === 'PLANNED') {
+            return;
+        }
+
+        $task->reopen();
+
+        $this->em->persist(
+            AnimalAgendaItemActionLog::reopened(
+                item: $task,
+                actor: $actor,
+                comment: $comment
+            )
+        );
+
+        $this->em->flush();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Application/Animal/Task/ReopenAnimalTaskService.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalTaskApiController.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Controller/Api/V1/AnimalTaskApiController.php
+
+namespace App\Controller\Api\V1;
+
+use App\Application\Animal\Task\CancelAnimalTaskService;
+use App\Application\Animal\Task\CreateAnimalTaskService;
+use App\Application\Animal\Task\MarkAnimalTaskDoneService;
+use App\Application\Animal\Task\ReopenAnimalTaskService;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\User;
+use App\Repository\AnimalAgendaItemRepository;
+use App\Repository\AnimalRepository;
+use App\Security\Permission\PermissionCatalog;
+use DomainException;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/v1/animals/{animalPublicId}/tasks')]
+final class AnimalTaskApiController extends AbstractController
+{
+    public function __construct(
+        private readonly AnimalRepository $animalRepository,
+        private readonly AnimalAgendaItemRepository $taskRepository,
+        private readonly CreateAnimalTaskService $createService,
+        private readonly MarkAnimalTaskDoneService $markDoneService,
+        private readonly ReopenAnimalTaskService $reopenService,
+        private readonly CancelAnimalTaskService $cancelService
+    ) {}
+
+    #[Route('', methods: ['POST'])]
+    public function create(string $animalPublicId, Request $request): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$user->getPerson()) {
+            return new JsonResponse(['error' => 'unauthenticated'], 401);
+        }
+
+        $animal = $this->animalRepository->findOneBy([
+            'publicId' => $animalPublicId,
+        ]);
+
+        if (!$animal) {
+            return new JsonResponse(['error' => 'animal_not_found'], 404);
+        }
+
+        $this->denyAccessUnlessGranted(
+            PermissionCatalog::ANIMAL_VIEW,
+            $animal
+        );
+
+        $payload = json_decode($request->getContent(), true);
+
+        if (
+            !is_array($payload)
+            || empty($payload['title'])
+            || empty($payload['scheduled_at'])
+        ) {
+            return new JsonResponse(['error' => 'invalid_payload'], 400);
+        }
+
+        try {
+            $scheduledAt = new \DateTimeImmutable($payload['scheduled_at']);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_date'], 400);
+        }
+
+        // ✅ PRIORIDADE COMO INT (DOMÍNIO)
+        $priority = AnimalAgendaItem::PRIORITY_NORMAL;
+
+        if (array_key_exists('priority', $payload)) {
+            $priority = (int) $payload['priority'];
+        }
+
+        try {
+            $task = $this->createService->create(
+                $animal->getAgenda(),
+                $user->getPerson(),
+                (string) $payload['title'],
+                $scheduledAt,
+                $animal->getOrganization()?->getId(),
+                $priority
+            );
+        } catch (\InvalidArgumentException $e) {
+            return new JsonResponse(
+                ['error' => $e->getMessage()],
+                400
+            );
+        }
+
+        return new JsonResponse(
+            ['id' => $task->getId()],
+            201
+        );
+    }
+
+    #[Route('/{id}/done', methods: ['PATCH'])]
+    public function done(string $animalPublicId, int $id, Request $request): JsonResponse
+    {
+        return $this->handleAction($animalPublicId, $id, $request, 'done');
+    }
+
+    #[Route('/{id}/reopen', methods: ['PATCH'])]
+    public function reopen(string $animalPublicId, int $id, Request $request): JsonResponse
+    {
+        return $this->handleAction($animalPublicId, $id, $request, 'reopen');
+    }
+
+    #[Route('/{id}/cancel', methods: ['PATCH'])]
+    public function cancel(string $animalPublicId, int $id, Request $request): JsonResponse
+    {
+        return $this->handleAction($animalPublicId, $id, $request, 'cancel');
+    }
+
+    private function handleAction(
+        string $animalPublicId,
+        int $id,
+        Request $request,
+        string $action
+    ): JsonResponse {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$user->getPerson()) {
+            return new JsonResponse(['error' => 'unauthenticated'], 401);
+        }
+
+        $animal = $this->animalRepository->findOneBy([
+            'publicId' => $animalPublicId,
+        ]);
+
+        if (!$animal) {
+            return new JsonResponse(['error' => 'animal_not_found'], 404);
+        }
+
+        $this->denyAccessUnlessGranted(
+            PermissionCatalog::ANIMAL_VIEW,
+            $animal
+        );
+
+        $task = $this->taskRepository->find($id);
+
+        if (
+            !$task instanceof AnimalAgendaItem
+            || $task->getAgenda()->animal()->getId() !== $animal->getId()
+        ) {
+            return new JsonResponse(['error' => 'task_not_found'], 404);
+        }
+
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $comment = $payload['comment'] ?? null;
+
+        try {
+            match ($action) {
+                'done' => $this->markDoneService
+                    ->markDone($task, $user->getPerson(), $comment),
+
+                'reopen' => $this->reopenService
+                    ->reopen($task, $user->getPerson(), $comment),
+
+                'cancel' => $this->cancelService
+                    ->cancel($task, $user->getPerson(), $comment),
+            };
+        } catch (DomainException $e) {
+            return new JsonResponse(
+                ['error' => $e->getMessage()],
+                400
+            );
+        }
+
+        return new JsonResponse(null, 204);
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalTaskApiController.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalTaskReadApiController.php =====
+<?php
+declare(strict_types=1);
+
+namespace App\Controller\Api\V1;
+
+use App\Entity\User;
+use App\Repository\AnimalAgendaItemRepository;
+use App\Repository\AnimalAgendaItemActionLogRepository;
+use App\Repository\AnimalRepository;
+use App\Security\Permission\PermissionCatalog;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/v1/animals/{animalPublicId}/tasks')]
+final class AnimalTaskReadApiController extends AbstractController
+{
+    public function __construct(
+        private readonly AnimalRepository $animalRepository,
+        private readonly AnimalAgendaItemRepository $taskRepository,
+        private readonly AnimalAgendaItemActionLogRepository $actionLogRepository
+    ) {}
+
+    #[Route('', methods: ['GET'])]
+    public function list(
+        string $animalPublicId,
+        Request $request
+    ): JsonResponse {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$user->getPerson()) {
+            return new JsonResponse(['error' => 'unauthenticated'], 401);
+        }
+
+        $animal = $this->animalRepository->findOneBy([
+            'publicId' => $animalPublicId,
+        ]);
+
+        if (!$animal) {
+            return new JsonResponse(['error' => 'animal_not_found'], 404);
+        }
+
+        $this->denyAccessUnlessGranted(
+            PermissionCatalog::ANIMAL_VIEW,
+            $animal
+        );
+
+        $from = $request->query->get('from');
+        $to = $request->query->get('to');
+        $status = $request->query->get('status');
+
+        $items = $this->taskRepository->findTasksForAnimal(
+            agenda: $animal->getAgenda(),
+            from: $from ? new \DateTimeImmutable($from) : null,
+            to: $to ? new \DateTimeImmutable($to) : null,
+            status: $status
+        );
+
+        $response = [];
+
+        foreach ($items as $task) {
+            $lastAction = $this->actionLogRepository
+                ->findLastForAgendaItem($task);
+
+            $rule = $task->getRecurrenceRule();
+
+            $response[] = [
+                'id' => $task->getId(),
+                'type' => 'task',
+                'title' => $task->getTitle(),
+                'description' => $task->getDescription(),
+                'status' => $task->getStatus(),
+                'priority' => $task->getPriority(),
+                'scheduled_at' => $task->getStartsAt()?->format(DATE_ATOM),
+                'created_at' => $task->getCreatedAt()->format(DATE_ATOM),
+                'created_by' => [
+                    'person_public_id' => $task->getCreatedBy()->getPublicId(),
+                    'name' => $task->getCreatedBy()->getFullName(),
+                ],
+                'recurrence' => $rule
+                    ? [
+                        'interval' => $rule->getInterval(),
+                        'unit' => $rule->getUnit(),
+                        'until' => $rule->getUntil()?->format('Y-m-d'),
+                    ]
+                    : null,
+            ];
+
+                    }
+
+        return new JsonResponse([
+            'items' => $response,
+        ]);
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalTaskReadApiController.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalTaskRecurrenceApiController.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Controller/Api/V1/AnimalTaskRecurrenceApiController.php
+
+namespace App\Controller\Api\V1;
+
+use App\Application\Animal\Task\GenerateRecurringAnimalTasksService;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemRecurrenceRule;
+use App\Entity\User;
+use App\Repository\AnimalAgendaItemRepository;
+use App\Repository\AnimalRepository;
+use App\Security\Permission\PermissionCatalog;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/v1/animals/{animalPublicId}/tasks/{taskId}/recurrence')]
+final class AnimalTaskRecurrenceApiController extends AbstractController
+{
+    public function __construct(
+        private readonly AnimalRepository $animalRepository,
+        private readonly AnimalAgendaItemRepository $taskRepository,
+        private readonly GenerateRecurringAnimalTasksService $generator,
+        private readonly EntityManagerInterface $em
+    ) {}
+
+    #[Route('', methods: ['POST'])]
+    public function configure(
+        string $animalPublicId,
+        int $taskId,
+        Request $request
+    ): JsonResponse {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$user->getPerson()) {
+            return new JsonResponse(['error' => 'unauthenticated'], 401);
+        }
+
+        $animal = $this->animalRepository->findOneBy(['publicId' => $animalPublicId]);
+        if (!$animal) {
+            return new JsonResponse(['error' => 'animal_not_found'], 404);
+        }
+
+        $this->denyAccessUnlessGranted(PermissionCatalog::ANIMAL_VIEW, $animal);
+
+        $task = $this->taskRepository->find($taskId);
+        if (!$task instanceof AnimalAgendaItem) {
+            return new JsonResponse(['error' => 'task_not_found'], 404);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload) || empty($payload['frequency'])) {
+            return new JsonResponse(['error' => 'invalid_payload'], 400);
+        }
+
+        try {
+            $rule = new AnimalAgendaItemRecurrenceRule(
+                agendaItem: $task,
+                frequency: $payload['frequency'],
+                intervalValue: (int)($payload['interval'] ?? 1),
+                daysOfWeek: $payload['days_of_week'] ?? null,
+                dayOfMonth: $payload['day_of_month'] ?? null,
+                until: isset($payload['until']) ? new \DateTimeImmutable($payload['until']) : null,
+                occurrences: $payload['occurrences'] ?? null
+            );
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_recurrence_rule'], 400);
+        }
+
+        $this->em->persist($rule);
+        $this->em->flush();
+
+        $this->generator->generate(
+            agenda: $animal->getAgenda(),
+            baseTask: $task,
+            rule: $rule,
+            actor: $user->getPerson(),
+            from: new \DateTimeImmutable(),
+            to: (new \DateTimeImmutable())->modify('+12 months')
+        );
+
+        return new JsonResponse(null, 201);
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalTaskRecurrenceApiController.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AgendaReadApiController.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Controller/Api/V1/AgendaReadApiController.php
+
+namespace App\Controller\Api\V1;
+
+use App\Application\Agenda\AgendaOccurrenceGenerator;
+use App\Entity\User;
+use App\Repository\AnimalAgendaItemRepository;
+use App\Repository\AgendaRecurrenceRuleRepository;
+use App\Repository\AnimalRepository;
+use App\Security\Permission\PermissionCatalog;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/v1/agenda')]
+final class AgendaReadApiController extends AbstractController
+{
+    public function __construct(
+        private readonly AnimalRepository $animalRepository,
+        private readonly AnimalAgendaItemRepository $agendaItemRepository,
+        private readonly AgendaRecurrenceRuleRepository $recurrenceRuleRepository,
+        private readonly AgendaOccurrenceGenerator $occurrenceGenerator
+    ) {}
+
+    /**
+     * Endpoint unificado de leitura da agenda.
+     *
+     * Retorna tarefas, eventos e agendamentos em uma linha do tempo única,
+     * filtrável por janela temporal (dia, semana, mês, ano).
+     */
+    #[Route('/animals/{animalPublicId}', methods: ['GET'])]
+    public function readForAnimal(
+        string $animalPublicId,
+        Request $request
+    ): JsonResponse {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$user->getPerson()) {
+            return new JsonResponse(['error' => 'unauthenticated'], 401);
+        }
+
+        $animal = $this->animalRepository->findOneBy([
+            'publicId' => $animalPublicId,
+        ]);
+
+        if (!$animal) {
+            return new JsonResponse(['error' => 'animal_not_found'], 404);
+        }
+
+        $this->denyAccessUnlessGranted(
+            PermissionCatalog::ANIMAL_VIEW,
+            $animal
+        );
+
+        $fromRaw = $request->query->get('from');
+        $toRaw   = $request->query->get('to');
+
+        if (!$fromRaw || !$toRaw) {
+            return new JsonResponse([
+                'error' => 'from_and_to_are_required'
+            ], 400);
+        }
+
+        try {
+            $from = new \DateTimeImmutable($fromRaw);
+            $to   = new \DateTimeImmutable($toRaw);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_date'], 400);
+        }
+
+        $items = $this->agendaItemRepository
+            ->findAllForAnimalAgenda($animal->getAgenda());
+
+        $timeline = [];
+
+        foreach ($items as $item) {
+            $rule = $this->recurrenceRuleRepository
+                ->findOneBy(['agendaItem' => $item]);
+
+            $occurrences = $this->occurrenceGenerator->generate(
+                item: $item,
+                rule: $rule,
+                from: $from,
+                to: $to
+            );
+
+            foreach ($occurrences as $occurrence) {
+                $timeline[] = [
+                    'type' => $item->getType(),
+                    'item_id' => $item->getId(),
+                    'title' => $item->getTitle(),
+                    'description' => $item->getDescription(),
+                    'status' => $item->getStatus(),
+                    'starts_at' => $occurrence['startsAt']->format(DATE_ATOM),
+                    'ends_at' => $occurrence['endsAt']
+                        ? $occurrence['endsAt']->format(DATE_ATOM)
+                        : null,
+                ];
+            }
+        }
+
+        usort(
+            $timeline,
+            fn ($a, $b) => strcmp($a['starts_at'], $b['starts_at'])
+        );
+
+        return new JsonResponse([
+            'from' => $from->format(DATE_ATOM),
+            'to'   => $to->format(DATE_ATOM),
+            'items' => $timeline,
+        ]);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AgendaReadApiController.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalAgendaReadApiController.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Controller/Api/V1/AnimalAgendaReadApiController.php
+
+namespace App\Controller\Api\V1;
+
+use App\Application\Agenda\AgendaTimeWindow;
+use App\Entity\User;
+use App\Repository\AnimalAgendaReadRepository;
+use App\Repository\AnimalRepository;
+use App\Security\Permission\PermissionCatalog;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/v1/animals/{animalPublicId}/agenda')]
+final class AnimalAgendaReadApiController extends AbstractController
+{
+    public function __construct(
+        private readonly AnimalRepository $animalRepository,
+        private readonly AnimalAgendaReadRepository $agendaRepository
+    ) {}
+
+    #[Route('', methods: ['GET'])]
+    public function read(
+        string $animalPublicId,
+        Request $request
+    ): JsonResponse {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$user->getPerson()) {
+            return new JsonResponse(['error' => 'unauthenticated'], 401);
+        }
+
+        $animal = $this->animalRepository->findOneBy(['publicId' => $animalPublicId]);
+        if (!$animal) {
+            return new JsonResponse(['error' => 'animal_not_found'], 404);
+        }
+
+        $this->denyAccessUnlessGranted(PermissionCatalog::ANIMAL_VIEW, $animal);
+
+        $view = $request->query->get('view', 'day');
+        $ref = new \DateTimeImmutable($request->query->get('ref', 'now'));
+
+        [$from, $to] = AgendaTimeWindow::resolve($view, $ref);
+
+        $items = $this->agendaRepository->findItemsInRange(
+            $animal->getAgenda(),
+            $from,
+            $to
+        );
+
+        $payload = array_map(static function ($item) {
+            return [
+                'id' => $item->getId(),
+                'type' => $item->getType(),
+                'title' => $item->getTitle(),
+                'status' => $item->getStatus(),
+                'priority' => $item->getPriority(),
+                'starts_at' => $item->getStartsAt()?->format(DATE_ATOM),
+                'ends_at' => $item->getEndsAt()?->format(DATE_ATOM),
+                'created_by' => [
+                    'person_public_id' => $item->getCreatedBy()->getPublicId(),
+                    'name' => $item->getCreatedBy()->getFullName(),
+                ],
+            ];
+        }, $items);
+
+        return new JsonResponse([
+            'animal_id' => $animalPublicId,
+            'view' => $view,
+            'from' => $from->format(DATE_ATOM),
+            'to' => $to->format(DATE_ATOM),
+            'items' => $payload,
+        ]);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Controller/Api/V1/AnimalAgendaReadApiController.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaItem.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Entity/AnimalAgendaItem.php
+
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'animal_agenda_item')]
+class AnimalAgendaItem
+{
+    public const PRIORITY_LOW = 1;
+    public const PRIORITY_NORMAL = 2;
+    public const PRIORITY_HIGH = 3;
+
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
+
+    #[ORM\ManyToOne(targetEntity: AnimalAgenda::class, inversedBy: 'items')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private AnimalAgenda $agenda;
+
+    #[ORM\ManyToOne(targetEntity: Person::class)]
+    #[ORM\JoinColumn(nullable: false)]
+    private Person $createdBy;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $organizationId = null;
+
+    #[ORM\Column(type: 'string', length: 30)]
+    private string $type;
+
+    #[ORM\Column(type: 'string', length: 30)]
+    private string $status;
+
+    #[ORM\Column(type: 'integer')]
+    private int $priority = self::PRIORITY_NORMAL;
+
+    #[ORM\Column(type: 'string', length: 255)]
+    private string $title;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $description = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $startsAt = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $endsAt = null;
+
+    #[ORM\Column(type: 'datetime_immutable')]
+    private \DateTimeImmutable $createdAt;
+
+    #[ORM\OneToOne(
+        mappedBy: 'agendaItem',
+        targetEntity: AnimalAgendaItemRecurrenceRule::class,
+        cascade: ['persist', 'remove']
+    )]
+    private ?AnimalAgendaItemRecurrenceRule $recurrenceRule = null;
+
+    #[ORM\OneToMany(
+        mappedBy: 'agendaItem',
+        targetEntity: AnimalAgendaItemActionLog::class,
+        cascade: ['persist', 'remove'],
+        orphanRemoval: true
+    )]
+    private Collection $actionLogs;
+
+    public function __construct(
+        AnimalAgenda $agenda,
+        Person $createdBy,
+        string $type,
+        string $title,
+        ?\DateTimeImmutable $startsAt = null,
+        ?\DateTimeImmutable $endsAt = null,
+        ?string $description = null,
+        ?int $organizationId = null,
+        int $priority = self::PRIORITY_NORMAL,
+        string $status = 'PLANNED'
+    ) {
+        $this->agenda = $agenda;
+        $this->createdBy = $createdBy;
+        $this->type = $type;
+        $this->title = $title;
+        $this->description = $description;
+        $this->startsAt = $startsAt;
+        $this->endsAt = $endsAt;
+        $this->status = $status;
+        $this->setPriority($priority);
+        $this->organizationId = $organizationId;
+        $this->createdAt = new \DateTimeImmutable();
+        $this->actionLogs = new ArrayCollection();
+    }
+
+    public static function createTask(
+        AnimalAgenda $agenda,
+        Person $createdBy,
+        string $title,
+        \DateTimeImmutable $scheduledAt,
+        ?int $organizationId = null,
+        int $priority = self::PRIORITY_NORMAL
+    ): self {
+        return new self(
+            agenda: $agenda,
+            createdBy: $createdBy,
+            type: 'task',
+            title: $title,
+            startsAt: $scheduledAt,
+            organizationId: $organizationId,
+            priority: $priority
+        );
+    }
+
+    public function setPriority(int $priority): void
+    {
+        if (!in_array(
+            $priority,
+            [self::PRIORITY_LOW, self::PRIORITY_NORMAL, self::PRIORITY_HIGH],
+            true
+        )) {
+            throw new \InvalidArgumentException('invalid_priority');
+        }
+
+        $this->priority = $priority;
+    }
+
+    public function updateDescription(?string $description): void
+    {
+        $this->description = $description !== null && trim($description) !== ''
+            ? $description
+            : null;
+    }
+
+    public function markDone(): void { $this->status = 'DONE'; }
+    public function cancel(): void { $this->status = 'CANCELED'; }
+    public function reopen(): void { $this->status = 'PLANNED'; }
+
+    public function setRecurrenceRule(AnimalAgendaItemRecurrenceRule $rule): void
+    {
+        $this->recurrenceRule = $rule;
+    }
+
+    public function getRecurrenceRule(): ?AnimalAgendaItemRecurrenceRule
+    {
+        return $this->recurrenceRule;
+    }
+
+    public function hasRecurrence(): bool
+    {
+        return $this->recurrenceRule !== null;
+    }
+
+    // Getters
+    public function getId(): ?int { return $this->id; }
+    public function getAgenda(): AnimalAgenda { return $this->agenda; }
+    public function getCreatedBy(): Person { return $this->createdBy; }
+    public function getType(): string { return $this->type; }
+    public function getStatus(): string { return $this->status; }
+    public function getPriority(): int { return $this->priority; }
+    public function getTitle(): string { return $this->title; }
+    public function getDescription(): ?string { return $this->description; }
+    public function getStartsAt(): ?\DateTimeImmutable { return $this->startsAt; }
+    public function getEndsAt(): ?\DateTimeImmutable { return $this->endsAt; }
+    public function getCreatedAt(): \DateTimeImmutable { return $this->createdAt; }
+
+    public function getOrganizationId(): ?int { return $this->organizationId; } // ✅ NOVO
+
+    /**
+     * @return Collection<int, AnimalAgendaItemActionLog>
+     */
+    public function getActionLogs(): Collection
+    {
+        return $this->actionLogs;
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaItem.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaItemRecurrenceRule.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Entity/AnimalAgendaItemRecurrenceRule.php
+
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'animal_agenda_item_recurrence_rule')]
+class AnimalAgendaItemRecurrenceRule
+{
+    public const FREQ_DAILY   = 'DAILY';
+    public const FREQ_WEEKLY  = 'WEEKLY';
+    public const FREQ_MONTHLY = 'MONTHLY';
+
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
+
+    #[ORM\OneToOne(targetEntity: AnimalAgendaItem::class)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private AnimalAgendaItem $agendaItem;
+
+    #[ORM\Column(type: 'string', length: 20)]
+    private string $frequency;
+
+    #[ORM\Column(type: 'integer')]
+    private int $intervalValue = 1; // ex: a cada X dias/semanas/meses
+
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $daysOfWeek = null; // ex: ["MONDAY","WEDNESDAY"]
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $dayOfMonth = null; // ex: todo dia 10
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $until = null; // data final
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $occurrences = null; // número máximo de repetições
+
+    public function __construct(
+        AnimalAgendaItem $agendaItem,
+        string $frequency,
+        int $intervalValue = 1,
+        ?array $daysOfWeek = null,
+        ?int $dayOfMonth = null,
+        ?\DateTimeImmutable $until = null,
+        ?int $occurrences = null
+    ) {
+        $this->agendaItem = $agendaItem;
+        $this->frequency = $frequency;
+        $this->intervalValue = $intervalValue;
+        $this->daysOfWeek = $daysOfWeek;
+        $this->dayOfMonth = $dayOfMonth;
+        $this->until = $until;
+        $this->occurrences = $occurrences;
+    }
+
+    // ========================
+    // Getters
+    // ========================
+
+    public function getId(): ?int
+    {
+        return $this->id;
+    }
+
+    public function getAgendaItem(): AnimalAgendaItem
+    {
+        return $this->agendaItem;
+    }
+
+    public function getFrequency(): string
+    {
+        return $this->frequency;
+    }
+
+    public function getIntervalValue(): int
+    {
+        return $this->intervalValue;
+    }
+
+    public function getDaysOfWeek(): ?array
+    {
+        return $this->daysOfWeek;
+    }
+
+    public function getDayOfMonth(): ?int
+    {
+        return $this->dayOfMonth;
+    }
+
+    public function getUntil(): ?\DateTimeImmutable
+    {
+        return $this->until;
+    }
+
+    public function getOccurrences(): ?int
+    {
+        return $this->occurrences;
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaItemRecurrenceRule.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Entity/AgendaRecurrenceRule.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Entity/AgendaRecurrenceRule.php
+
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'agenda_recurrence_rule')]
+class AgendaRecurrenceRule
+{
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
+
+    #[ORM\OneToOne(targetEntity: AnimalAgendaItem::class)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private AnimalAgendaItem $agendaItem;
+
+    #[ORM\Column(type: 'integer')]
+    private int $intervalValue; // ex: 1, 2, 3
+
+    #[ORM\Column(type: 'string', length: 10)]
+    private string $intervalUnit; // day | week | month | year
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $until = null;
+
+    public function __construct(
+        AnimalAgendaItem $agendaItem,
+        int $intervalValue,
+        string $intervalUnit,
+        ?\DateTimeImmutable $until = null
+    ) {
+        $this->agendaItem = $agendaItem;
+        $this->intervalValue = $intervalValue;
+        $this->intervalUnit = $intervalUnit;
+        $this->until = $until;
+    }
+
+    // ========================
+    // Getters
+    // ========================
+
+    public function getId(): ?int
+    {
+        return $this->id;
+    }
+
+    public function getAgendaItem(): AnimalAgendaItem
+    {
+        return $this->agendaItem;
+    }
+
+    public function getIntervalValue(): int
+    {
+        return $this->intervalValue;
+    }
+
+    public function getIntervalUnit(): string
+    {
+        return $this->intervalUnit;
+    }
+
+    public function getUntil(): ?\DateTimeImmutable
+    {
+        return $this->until;
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Entity/AgendaRecurrenceRule.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaRecurrenceRule.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Entity/AnimalAgendaRecurrenceRule.php
+
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'animal_agenda_recurrence_rule')]
+class AnimalAgendaRecurrenceRule
+{
+    public const UNIT_DAY = 'day';
+    public const UNIT_WEEK = 'week';
+    public const UNIT_MONTH = 'month';
+    public const UNIT_YEAR = 'year';
+
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
+
+    #[ORM\Column(type: 'integer')]
+    private int $interval;
+
+    #[ORM\Column(type: 'string', length: 10)]
+    private string $unit;
+
+    #[ORM\Column(type: 'date_immutable', nullable: true)]
+    private ?\DateTimeImmutable $until;
+
+    public function __construct(
+        int $interval,
+        string $unit,
+        ?\DateTimeImmutable $until = null
+    ) {
+        if ($interval < 1) {
+            throw new \InvalidArgumentException('interval_must_be_positive');
+        }
+
+        if (!in_array($unit, [
+            self::UNIT_DAY,
+            self::UNIT_WEEK,
+            self::UNIT_MONTH,
+            self::UNIT_YEAR,
+        ], true)) {
+            throw new \InvalidArgumentException('invalid_recurrence_unit');
+        }
+
+        $this->interval = $interval;
+        $this->unit = $unit;
+        $this->until = $until;
+    }
+
+    public function getInterval(): int
+    {
+        return $this->interval;
+    }
+
+    public function getUnit(): string
+    {
+        return $this->unit;
+    }
+
+    public function getUntil(): ?\DateTimeImmutable
+    {
+        return $this->until;
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaRecurrenceRule.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaItemActionLog.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Entity/AnimalAgendaItemActionLog.php
+
+namespace App\Entity;
+
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'animal_agenda_item_action_log')]
+class AnimalAgendaItemActionLog
+{
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
+
+    #[ORM\ManyToOne(targetEntity: AnimalAgendaItem::class)]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private AnimalAgendaItem $agendaItem;
+
+    #[ORM\ManyToOne(targetEntity: Person::class)]
+    #[ORM\JoinColumn(nullable: false)]
+    private Person $actor;
+
+    #[ORM\Column(type: 'string', length: 30)]
+    private string $action;
+
+    #[ORM\Column(type: 'json')]
+    private array $payload;
+
+    #[ORM\Column(type: 'datetime_immutable')]
+    private \DateTimeImmutable $occurredAt;
+
+    private function __construct(
+        AnimalAgendaItem $agendaItem,
+        Person $actor,
+        string $action,
+        array $payload = []
+    ) {
+        $this->agendaItem = $agendaItem;
+        $this->actor = $actor;
+        $this->action = $action;
+        $this->payload = $payload;
+        $this->occurredAt = new \DateTimeImmutable();
+    }
+
+    // ========================
+    // Factories (CONTRATO DO DOMÍNIO)
+    // ========================
+
+    public static function created(
+        AnimalAgendaItem $item,
+        Person $actor,
+        array $payload = []
+    ): self {
+        return new self(
+            agendaItem: $item,
+            actor: $actor,
+            action: 'created',
+            payload: $payload
+        );
+    }
+
+    public static function completed(
+        AnimalAgendaItem $item,
+        Person $actor,
+        ?string $comment = null
+    ): self {
+        return new self(
+            agendaItem: $item,
+            actor: $actor,
+            action: 'completed',
+            payload: $comment ? ['comment' => $comment] : []
+        );
+    }
+
+    public static function reopened(
+        AnimalAgendaItem $item,
+        Person $actor,
+        ?string $comment = null
+    ): self {
+        return new self(
+            agendaItem: $item,
+            actor: $actor,
+            action: 'reopened',
+            payload: $comment ? ['comment' => $comment] : []
+        );
+    }
+
+    public static function canceled(
+        AnimalAgendaItem $item,
+        Person $actor,
+        ?string $comment = null
+    ): self {
+        return new self(
+            agendaItem: $item,
+            actor: $actor,
+            action: 'canceled',
+            payload: $comment ? ['comment' => $comment] : []
+        );
+    }
+
+    // ========================
+    // Getters
+    // ========================
+
+    public function getAction(): string
+    {
+        return $this->action;
+    }
+
+    public function getActor(): Person
+    {
+        return $this->actor;
+    }
+
+    public function getPayload(): array
+    {
+        return $this->payload;
+    }
+
+    public function getOccurredAt(): \DateTimeImmutable
+    {
+        return $this->occurredAt;
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/src/Entity/AnimalAgendaItemActionLog.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Repository/AnimalAgendaItemRepository.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Repository/AnimalAgendaItemRepository.php
+
+namespace App\Repository;
+
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+
+final class AnimalAgendaItemRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, AnimalAgendaItem::class);
+    }
+
+    /**
+     * Retorna TODOS os itens da agenda (tarefas, eventos, agendamentos),
+     * sem expandir recorrência.
+     *
+     * @return AnimalAgendaItem[]
+     */
+    public function findAllForAnimalAgenda(
+        AnimalAgenda $agenda
+    ): array {
+        return $this->createQueryBuilder('i')
+            ->andWhere('i.agenda = :agenda')
+            ->setParameter('agenda', $agenda)
+            ->orderBy('i.startsAt', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * @return AnimalAgendaItem[]
+     */
+    public function findTasksForAnimal(
+        AnimalAgenda $agenda,
+        ?\DateTimeImmutable $from = null,
+        ?\DateTimeImmutable $to = null,
+        ?string $status = null
+    ): array {
+        $qb = $this->createQueryBuilder('i')
+            ->andWhere('i.agenda = :agenda')
+            ->andWhere('i.type = :type')
+            ->setParameter('agenda', $agenda)
+            ->setParameter('type', 'task')
+            ->orderBy('i.startsAt', 'ASC');
+
+        if ($status !== null) {
+            $qb
+                ->andWhere('i.status = :status')
+                ->setParameter('status', $status);
+        }
+
+        if ($from !== null) {
+            $qb
+                ->andWhere('i.startsAt >= :from')
+                ->setParameter('from', $from);
+        }
+
+        if ($to !== null) {
+            $qb
+                ->andWhere('i.startsAt <= :to')
+                ->setParameter('to', $to);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    public function findTasksForAgenda(
+    AnimalAgenda $agenda,
+    ?\DateTimeImmutable $from = null,
+    ?\DateTimeImmutable $to = null,
+    ?string $status = null
+): array {
+    $qb = $this->createQueryBuilder('i')
+        ->andWhere('i.agenda = :agenda')
+        ->andWhere('i.type = :type')
+        ->setParameter('agenda', $agenda)
+        ->setParameter('type', 'task')
+        ->orderBy('i.startsAt', 'ASC');
+
+    if ($status && $status !== 'ALL') {
+        $qb->andWhere('i.status = :status')
+           ->setParameter('status', $status);
+    }
+
+    if ($from) {
+        $qb->andWhere('i.startsAt >= :from')
+           ->setParameter('from', $from);
+    }
+
+    if ($to) {
+        $qb->andWhere('i.startsAt <= :to')
+           ->setParameter('to', $to);
+    }
+
+    return $qb->getQuery()->getResult();
+}
+
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Repository/AnimalAgendaItemRepository.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Repository/AnimalAgendaItemActionLogRepository.php =====
+<?php
+declare(strict_types=1);
+
+namespace App\Repository;
+
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+
+final class AnimalAgendaItemActionLogRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, AnimalAgendaItemActionLog::class);
+    }
+
+    public function findLastForAgendaItem(
+        AnimalAgendaItem $item
+    ): ?AnimalAgendaItemActionLog {
+        return $this->createQueryBuilder('l')
+            ->andWhere('l.agendaItem = :item')
+            ->setParameter('item', $item)
+            ->orderBy('l.occurredAt', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Repository/AnimalAgendaItemActionLogRepository.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Repository/AgendaRecurrenceRuleRepository.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Repository/AgendaRecurrenceRuleRepository.php
+
+namespace App\Repository;
+
+use App\Entity\AgendaRecurrenceRule;
+use App\Entity\AnimalAgendaItem;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+
+final class AgendaRecurrenceRuleRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, AgendaRecurrenceRule::class);
+    }
+
+    public function findForAgendaItem(
+        AnimalAgendaItem $item
+    ): ?AgendaRecurrenceRule {
+        return $this->findOneBy([
+            'agendaItem' => $item,
+        ]);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Repository/AgendaRecurrenceRuleRepository.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/src/Repository/AnimalAgendaReadRepository.php =====
+<?php
+declare(strict_types=1);
+
+// path: backend/src/Repository/AnimalAgendaReadRepository.php
+
+namespace App\Repository;
+
+use App\Entity\AnimalAgenda;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+
+final class AnimalAgendaReadRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, AnimalAgenda::class);
+    }
+
+    public function findItemsInRange(
+        AnimalAgenda $agenda,
+        \DateTimeImmutable $from,
+        \DateTimeImmutable $to
+    ): array {
+        return $this->_em->createQueryBuilder()
+            ->select('i')
+            ->from('App\Entity\AnimalAgendaItem', 'i')
+            ->andWhere('i.agenda = :agenda')
+            ->andWhere('i.startsAt BETWEEN :from AND :to')
+            ->setParameters([
+                'agenda' => $agenda,
+                'from' => $from,
+                'to' => $to,
+            ])
+            ->orderBy('i.startsAt', 'ASC')
+            ->addOrderBy('i.priority', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/src/Repository/AnimalAgendaReadRepository.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/migrations/Version20260216112338.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace DoctrineMigrations;
+
+use Doctrine\DBAL\Schema\Schema;
+use Doctrine\Migrations\AbstractMigration;
+
+/**
+ * Auto-generated Migration: Please modify to your needs!
+ */
+final class Version20260216112338 extends AbstractMigration
+{
+    public function getDescription(): string
+    {
+        return '';
+    }
+
+    public function up(Schema $schema): void
+    {
+        // this up() migration is auto-generated, please modify it to your needs
+        $this->addSql('ALTER TABLE animal_agenda_item ADD priority INT NOT NULL');
+        $this->addSql('ALTER TABLE animal_agenda_item ADD CONSTRAINT FK_858454D7C9C55883 FOREIGN KEY (treatment_schedule_id) REFERENCES animal_treatment_schedules (id) ON DELETE SET NULL NOT DEFERRABLE INITIALLY IMMEDIATE');
+        $this->addSql('CREATE INDEX IDX_858454D7C9C55883 ON animal_agenda_item (treatment_schedule_id)');
+    }
+
+    public function down(Schema $schema): void
+    {
+        // this down() migration is auto-generated, please modify it to your needs
+        $this->addSql('CREATE SCHEMA public');
+        $this->addSql('ALTER TABLE animal_agenda_item DROP CONSTRAINT FK_858454D7C9C55883');
+        $this->addSql('DROP INDEX IDX_858454D7C9C55883');
+        $this->addSql('ALTER TABLE animal_agenda_item DROP priority');
+    }
+}
+
+===== END FILE: /var/www/app-plataforma/backend/migrations/Version20260216112338.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/routes/api_login_options.yaml =====
+api_login_options:
+  path: /api/login
+  methods: [OPTIONS]
+  controller: Symfony\Bundle\FrameworkBundle\Controller\AbstractController::json
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/routes/api_login_options.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/routes/api_login.yaml =====
+api_login:
+    path: /api/login
+    methods: [POST]
+
+===== END FILE: /var/www/app-plataforma/backend/config/routes/api_login.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/routes/framework.yaml =====
+when@dev:
+    _errors:
+        resource: '@FrameworkBundle/Resources/config/routing/errors.php'
+        prefix: /_error
+
+===== END FILE: /var/www/app-plataforma/backend/config/routes/framework.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/routes/security.yaml =====
+_security_logout:
+    resource: security.route_loader.logout
+    type: service
+
+===== END FILE: /var/www/app-plataforma/backend/config/routes/security.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/cache.yaml =====
+framework:
+    cache:
+        # Unique name of your app: used to compute stable namespaces for cache keys.
+        #prefix_seed: your_vendor_name/app_name
+
+        # The "app" cache stores to the filesystem by default.
+        # The data in this cache should persist between deploys.
+        # Other options include:
+
+        # Redis
+        #app: cache.adapter.redis
+        #default_redis_provider: redis://localhost
+
+        # APCu (not recommended with heavy random-write workloads as memory fragmentation can cause perf issues)
+        #app: cache.adapter.apcu
+
+        # Namespaced pools use the above "app" backend by default
+        #pools:
+            #my.dedicated.cache: null
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/cache.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/doctrine_migrations.yaml =====
+doctrine_migrations:
+    migrations_paths:
+        # namespace is arbitrary but should be different from App\Migrations
+        # as migrations classes should NOT be autoloaded
+        'DoctrineMigrations': '%kernel.project_dir%/migrations'
+    enable_profiler: false
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/doctrine_migrations.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/doctrine.yaml =====
+doctrine:
+    dbal:
+        url: '%env(resolve:DATABASE_URL)%'
+
+        # IMPORTANT: You MUST configure your server version,
+        # either here or in the DATABASE_URL env var (see .env file)
+        #server_version: '16'
+
+        profiling_collect_backtrace: '%kernel.debug%'
+        use_savepoints: true
+    orm:
+        auto_generate_proxy_classes: true
+        enable_lazy_ghost_objects: true
+        report_fields_where_declared: true
+        validate_xml_mapping: true
+        naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
+        identity_generation_preferences:
+            Doctrine\DBAL\Platforms\PostgreSQLPlatform: identity
+        auto_mapping: true
+        mappings:
+            App:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Entity'
+                prefix: 'App\Entity'
+                alias: App
+        controller_resolver:
+            auto_mapping: false
+
+when@test:
+    doctrine:
+        dbal:
+            # "TEST_TOKEN" is typically set by ParaTest
+            dbname_suffix: '_test%env(default::TEST_TOKEN)%'
+
+when@prod:
+    doctrine:
+        orm:
+            auto_generate_proxy_classes: false
+            proxy_dir: '%kernel.build_dir%/doctrine/orm/Proxies'
+            query_cache_driver:
+                type: pool
+                pool: doctrine.system_cache_pool
+            result_cache_driver:
+                type: pool
+                pool: doctrine.result_cache_pool
+
+    framework:
+        cache:
+            pools:
+                doctrine.result_cache_pool:
+                    adapter: cache.app
+                doctrine.system_cache_pool:
+                    adapter: cache.system
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/doctrine.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/framework.yaml =====
+# config/packages/framework.yaml
+# see https://symfony.com/doc/current/reference/configuration/framework.html
+
+framework:
+    secret: '%env(APP_SECRET)%'
+    csrf_protection: true
+
+    router:
+        default_uri: 'http://127.0.0.1:8000'
+
+    session: true
+
+    mailer:
+        dsn: '%env(MAILER_DSN)%'
+
+when@test:
+    framework:
+        test: true
+        csrf_protection: true
+        session:
+            storage_factory_id: session.storage.factory.mock_file
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/framework.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/gesdinet_jwt_refresh_token.yaml =====
+# backend/config/packages/gesdinet_jwt_refresh_token.yaml
+gesdinet_jwt_refresh_token:
+    refresh_token_class: App\Entity\RefreshToken
+    ttl: 2592000
+
+    cookie:
+        enabled: true
+        path: /api
+        secure: true
+        http_only: true
+        same_site: none
+        remove_token_from_body: true
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/gesdinet_jwt_refresh_token.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/knpu_oauth2_client.yaml =====
+knpu_oauth2_client:
+    clients:
+        google:
+            type: google
+            client_id: '%env(OAUTH_GOOGLE_CLIENT_ID)%'
+            client_secret: '%env(OAUTH_GOOGLE_CLIENT_SECRET)%'
+            redirect_route: oauth_google_check
+            redirect_params: {}
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/knpu_oauth2_client.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/lexik_jwt_authentication.yaml =====
+lexik_jwt_authentication:
+    secret_key: '%kernel.project_dir%/config/jwt/private.pem'
+    public_key: '%kernel.project_dir%/config/jwt/public.pem'
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/lexik_jwt_authentication.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/mailer.yaml =====
+framework:
+    mailer:
+        dsn: '%env(MAILER_DSN)%'
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/mailer.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/nelmio_cors.yaml =====
+nelmio_cors:
+  defaults:
+    allow_origin: ["*",'http://localhost:3000', 'https://gsa-animal.local']
+    allow_credentials: true
+    allow_headers: ['Content-Type', 'Authorization']
+    allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+    max_age: 3600
+
+  paths:
+    '^/':
+      allow_origin: ["*",'http://localhost:3000', 'https://gsa-animal.local']
+      allow_credentials: true
+      allow_headers: ['Content-Type', 'Authorization']
+      allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/nelmio_cors.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/property_info.yaml =====
+framework:
+    property_info:
+        with_constructor_extractor: true
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/property_info.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/rate_limiter.yaml =====
+# path: backend/config/packages/rate_limiter.yaml
+
+framework:
+  rate_limiter:
+
+    anonymous_api:
+      policy: sliding_window
+      limit: 10
+      interval: '15 minutes'
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/rate_limiter.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/routing.yaml =====
+framework:
+    router:
+        # Configure how to generate URLs in non-HTTP contexts, such as CLI commands.
+        # See https://symfony.com/doc/current/routing.html#generating-urls-in-commands
+        default_uri: '%env(DEFAULT_URI)%'
+
+when@prod:
+    framework:
+        router:
+            strict_requirements: null
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/routing.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/security.yaml =====
+security:
+    password_hashers:
+        App\Entity\User:
+            algorithm: auto
+
+    providers:
+        app_user_provider:
+            entity:
+                class: App\Entity\User
+                property: email
+
+    firewalls:
+        options:
+            pattern: ^/
+            methods: [OPTIONS]
+            security: false
+
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        # =========================
+        # GOOGO( AUTH)
+        # =========================
+        oauth_exchange:
+            pattern: ^/api/oauth/exchange
+            stateless: true
+            security: false
+
+        # =========================
+        # PUBLIC API (SEM AUTH)
+        # =========================
+        public_api:
+            pattern: ^/api/public
+            stateless: true
+            security: false
+
+        # =========================
+        # DEV API (SEM AUTH)
+        # =========================
+        dev_api:
+            pattern: ^/api/dev
+            stateless: true
+            security: false
+
+        # =========================
+        # OAUTH FIREWALL (STATEFUL)
+        # =========================
+        oauth:
+            pattern: ^/connect/
+            stateless: false
+            custom_authenticators:
+                - App\Security\Authenticator\GoogleOAuthAuthenticator
+
+        # =========================
+        # LOGIN JWT
+        # =========================
+        login:
+            pattern: ^/api/login$
+            stateless: true
+            provider: app_user_provider
+            user_checker: App\Security\UserVerificationChecker
+            json_login:
+                check_path: /api/login
+                username_path: email
+                password_path: password
+                success_handler: App\Security\JwtLoginSuccessHandler
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+
+        # =========================
+        # REFRESH TOKEN
+        # =========================
+        refresh:
+            pattern: ^/api/token/refresh$
+            provider: app_user_provider
+            stateless: true
+            refresh_jwt: ~
+
+        # =========================
+        # API JWT (PROTEGIDA)
+        # =========================
+        api:
+            pattern: ^/api
+            stateless: true
+            provider: app_user_provider
+            user_checker: App\Security\UserVerificationChecker
+            jwt: ~
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/security.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/test/doctrine.yaml =====
+doctrine:
+    orm:
+        entity_managers:
+            default:
+                mappings:
+                    App:
+                        is_bundle: false
+                        type: attribute
+                        dir: '%kernel.project_dir%/src/Entity'
+                        prefix: 'App\Entity'
+                        alias: App
+                dql:
+                    string_functions:
+                        JSON_GET_TEXT: App\Doctrine\DQL\JsonGetText
+        auto_generate_proxy_classes: true
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/test/doctrine.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/test/framework.yaml =====
+framework:
+    test: true
+
+    session:
+        enabled: true
+        storage_factory_id: session.storage.factory.mock_file
+
+    csrf_protection: false
+
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/test/framework.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/packages/twig.yaml =====
+twig:
+    file_name_pattern: '*.twig'
+
+when@test:
+    twig:
+        strict_variables: true
+
+===== END FILE: /var/www/app-plataforma/backend/config/packages/twig.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/config/services.yaml =====
+# path: backend/config/services.yaml
+
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+
+  App\:
+    resource: '../src/'
+    exclude:
+      - '../src/DependencyInjection/'
+      - '../src/Entity/'
+      - '../src/Kernel.php'
+
+  App\Controller\:
+    resource: '../src/Controller/'
+    tags: ['controller.service_arguments']
+
+  App\Application\Animal\:
+    resource: '../src/Application/Animal'
+    autowire: true
+    autoconfigure: true
+
+
+  # ==========================
+  # RATE LIMITERS (PUBLIC API)
+  # ==========================
+
+  App\Controller\PublicPasswordResetController:
+    arguments:
+      $anonymousApiLimiter: '@limiter.anonymous_api'
+
+  Aws\S3\S3Client:
+    arguments:
+      -
+        version: 'latest'
+        region: '%env(AWS_REGION)%'
+        credentials:
+          key: '%env(AWS_ACCESS_KEY_ID)%'
+          secret: '%env(AWS_SECRET_ACCESS_KEY)%'
+
+  App\Application\User\SendSignupAttemptNotificationService:
+     arguments:
+       $mailerFrom: '%env(MAILER_FROM)%'
+
+  App\Application\User\SendUserEmailVerificationService:
+    arguments:
+      $mailerFrom: '%env(MAILER_FROM)%'
+
+  App\Controller\PublicEmailVerificationController:
+    arguments:
+      $anonymousApiLimiter: '@limiter.anonymous_api'
+
+  App\Application\User\PasswordResetRequestService:
+    arguments:
+      $mailerFrom: '%env(MAILER_FROM)%'
+
+  App\Security\FrontendOriginResolver:
+    arguments:
+      $allowedOrigins: '%env(json:ALLOWED_FRONTEND_ORIGINS)%'
+
+  App\Application\Media\FileStorageInterface:
+    class: App\Infrastructure\Media\AwsS3FileStorage
+    arguments:
+      $bucket: '%env(AWS_S3_BUCKET)%'
+
+  App\Application\Media\UploadFileService:
+    arguments:
+      $storagePrefix: '%env(MEDIA_STORAGE_PREFIX)%'
+
+  App\Application\Agenda\Service\CreateAnimalAgendaItemServiceInterface:
+    class: App\Application\Agenda\Service\CreateAnimalAgendaItemService
+
+  App\Application\Animal\Agenda\AnimalAgendaService: ~
+
+  App\Security\OAuth\FrontendRedirectResolver:
+    arguments:
+      $allowedRedirectOrigins: '%env(json:OAUTH_ALLOWED_REDIRECT_ORIGINS)%'
+      $defaultFrontendUrl: '%env(resolve:FRONTEND_URL)%'
+
+  # ==========================
+  # ALERT DISPATCHER & HANDLERS
+  # ==========================
+
+  App\Application\Alert\AlertActionDispatcher:
+    arguments:
+      $handlers: !tagged_iterator 'app.alert_action_handler'
+
+  App\Application\Alert\AcceptAnimalTutorInviteFromAlertService:
+    tags:
+      - { name: 'app.alert_action_handler' }
+
+  App\Application\Alert\RejectAnimalTutorInviteFromAlertService:
+    tags:
+      - { name: 'app.alert_action_handler' }
+
+===== END FILE: /var/www/app-plataforma/backend/config/services.yaml =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Application/Animal/AnimalCreationServiceTest.php =====
+<?php
+// path: /var/www/app-plataforma/backend/tests/Application/Animal/AnimalCreationServiceTest.php
+
+namespace App\Tests\Application\Animal;
+
+use App\Application\Animal\AnimalCreationService;
+use App\Entity\AnimalType;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\TestCase;
+
+final class AnimalCreationServiceTest extends TestCase
+{
+    public function testCreatesAnimalWithValidType(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $service = new AnimalCreationService($em);
+
+        $person = new Person();
+        $type = AnimalType::dog(); // ✅ unit test não consulta repository
+
+        $em->expects($this->once())->method('persist');
+        $em->expects($this->once())->method('flush');
+        $em->expects($this->never())->method('refresh');
+
+        $animal = $service->create(
+            creator: $person,
+            organization: null,
+            type: $type,
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short'
+        );
+
+        $this->assertSame($type, $animal->getType());
+        $this->assertSame('tutor', $animal->getPersonLinks()->first()->getRelationType());
+    }
+
+    public function testThrowsWhenInvalidCreator(): void
+    {
+        $this->expectException(\TypeError::class);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $service = new AnimalCreationService($em);
+
+        $service->create(
+            creator: 'invalid',
+            organization: null,
+            type: AnimalType::dog(),
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short'
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Application/Animal/AnimalCreationServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Application/Animal/CreateAnimalForTutorServiceTest.php =====
+<?php
+
+namespace App\Tests\Application\Animal;
+
+use App\Application\Animal\CreateAnimalForTutorService;
+use App\Entity\Person;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class CreateAnimalForTutorServiceTest extends KernelTestCase
+{
+    public function testTutorCreatesAnimal(): void
+    {
+        self::bootKernel();
+
+        $container = self::getContainer();
+        $em = $container->get('doctrine')->getManager();
+
+        $tutor = new Person();
+        $tutor->setFullName('Tutor Test');
+
+        $em->persist($tutor);
+        $em->flush();
+
+        /** @var CreateAnimalForTutorService $service */
+        $service = $container->get(CreateAnimalForTutorService::class);
+
+        $animal = $service->create($tutor);
+
+        self::assertNotNull($animal->getId());
+        self::assertSame($tutor, $animal->getTutor());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Application/Animal/CreateAnimalForTutorServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Application/Animal/CreateAnimalWithAgendaServiceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Application\Animal;
+
+use App\Application\Animal\CreateAnimalWithAgendaService;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalType;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class CreateAnimalWithAgendaServiceTest extends KernelTestCase
+{
+    public function testAnimalIsCreatedWithAgenda(): void
+    {
+        self::bootKernel();
+
+        $container = self::getContainer();
+        $em = $container->get('doctrine')->getManager();
+
+        /** @var User $user */
+        $user = $em->getRepository(User::class)->findOneBy([
+            'email' => 'admin@example.com',
+        ]);
+        self::assertNotNull($user);
+
+        /** @var AnimalType $type */
+        $type = $em->getRepository(AnimalType::class)->findOneBy([]);
+        self::assertNotNull($type);
+
+        /** @var CreateAnimalWithAgendaService $animalCreator */
+        $animalCreator = $container->get(CreateAnimalWithAgendaService::class);
+
+        $animal = $animalCreator->create(
+            creator: $user->getPerson(),
+            organization: null,
+            type: $type,
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short',
+            callName: 'Rex'
+        );
+
+        $agenda = $em->getRepository(AnimalAgenda::class)
+            ->findOneBy(['animal' => $animal]);
+
+        self::assertNotNull(
+            $agenda,
+            'Animal must be created with an agenda automatically'
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Application/Animal/CreateAnimalWithAgendaServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Application/Organization/OrganizationCreationServiceTest.php =====
+<?php
+
+namespace App\Tests\Application\Organization;
+
+use App\Application\Organization\OrganizationCreationService;
+use App\Entity\Organization;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+
+#[CoversClass(OrganizationCreationService::class)]
+final class OrganizationCreationServiceTest extends KernelTestCase
+{
+    private OrganizationCreationService $service;
+
+    protected function setUp(): void
+    {
+	    parent::setUp();
+
+        $this->service = self::getContainer()->get(OrganizationCreationService::class);
+    }
+
+    public function testCreateOrganizationSuccessfully(): void
+    {
+        $organization = $this->service->create(
+            name: 'Test Clinic',
+            orgType: Organization::TYPE_CLINIC,
+            taxId: 'PT123456789'
+        );
+
+        $this->assertInstanceOf(Organization::class, $organization);
+        $this->assertNotNull($organization->getId());
+        $this->assertSame('Test Clinic', $organization->getName());
+        $this->assertSame(Organization::TYPE_CLINIC, $organization->getOrgType());
+        $this->assertSame('PT123456789', $organization->getTaxId());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Application/Organization/OrganizationCreationServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/bootstrap.php =====
+<?php
+
+declare(strict_types=1);
+
+use Symfony\Component\Dotenv\Dotenv;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+/**
+ * ============================================================
+ * BOOTSTRAP GLOBAL DE TESTES
+ * ============================================================
+ * Responsabilidades:
+ * - Garantir APP_ENV=test
+ * - Carregar variáveis de ambiente
+ * - Resetar banco de dados (drop + migrate + fixtures)
+ * ============================================================
+ */
+
+// -----------------------------------------------------------------------------
+// 1) Garantia absoluta de ambiente
+// -----------------------------------------------------------------------------
+$_ENV['APP_ENV'] = $_ENV['APP_ENV'] ?? 'test';
+$_SERVER['APP_ENV'] = $_ENV['APP_ENV'];
+
+if ($_ENV['APP_ENV'] !== 'test') {
+    fwrite(STDERR, "ABORTADO: bootstrap de testes fora do ambiente TEST\n");
+    exit(1);
+}
+
+// -----------------------------------------------------------------------------
+// 2) Carregamento de variáveis de ambiente
+// -----------------------------------------------------------------------------
+$dotenv = new Dotenv();
+$dotenv->usePutenv();
+
+$projectDir = dirname(__DIR__);
+
+// .env (base)
+$dotenv->loadEnv($projectDir . '/.env');
+
+// .env.test sobrescreve tudo
+$envTest = $projectDir . '/.env.test';
+if (file_exists($envTest)) {
+    $dotenv->loadEnv($envTest);
+}
+
+// -----------------------------------------------------------------------------
+// 3) Reset de banco de dados (uma única vez)
+// -----------------------------------------------------------------------------
+static $databaseBootstrapped = false;
+
+if ($databaseBootstrapped === false) {
+    $databaseBootstrapped = true;
+
+    fwrite(STDOUT, "\n>>> [TEST BOOTSTRAP] Resetando banco de dados de TESTE\n");
+
+    $resetScript = $projectDir . '/bin/reset-test-db.sh';
+
+    if (!file_exists($resetScript)) {
+        fwrite(STDERR, "ERRO: reset-test-db.sh não encontrado em {$resetScript}\n");
+        exit(1);
+    }
+
+    passthru($resetScript, $exitCode);
+
+    if ($exitCode !== 0) {
+        fwrite(STDERR, "ERRO: falha ao resetar banco de testes\n");
+        exit(1);
+    }
+
+    fwrite(STDOUT, ">>> [TEST BOOTSTRAP] Banco de testes pronto\n\n");
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/bootstrap.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/AccessControl/Stub/AccessGrantRepositoryStub.php =====
+<?php
+
+namespace App\Tests\Domain\AccessControl\Stub;
+
+use App\Domain\AccessControl\Repository\AccessGrantRepositoryInterface;
+use App\Entity\Animal;
+use App\Entity\Person;
+use App\Entity\AccessGrant;
+use ReflectionClass;
+
+final class AccessGrantRepositoryStub implements AccessGrantRepositoryInterface
+{
+    private array $grants = [];
+
+    public function seed(array $grants): void
+    {
+        $this->grants = $grants;
+    }
+
+    public function findByAnimalAndGrantedTo(Animal $animal, Person $person): array
+    {
+        return array_filter(
+            $this->grants,
+            fn (AccessGrant $grant) =>
+                $this->getPrivate($grant, 'animal') === $animal
+                && $this->getPrivate($grant, 'grantedTo') === $person
+        );
+    }
+
+    public function save(object $grant): void
+    {
+        // no-op (em memória)
+    }
+
+    /* =====================================================
+       Métodos auxiliares DE TESTE (não fazem parte da interface)
+       ===================================================== */
+
+    public function createActiveGrant(Animal $animal, Person $person): AccessGrant
+    {
+        return $this->createGrant($animal, $person, 'active');
+    }
+
+    public function createRevokedGrant(Animal $animal, Person $person): AccessGrant
+    {
+        return $this->createGrant($animal, $person, 'revoked');
+    }
+
+    private function createGrant(Animal $animal, Person $person, string $status): AccessGrant
+    {
+        $ref = new ReflectionClass(AccessGrant::class);
+        $grant = $ref->newInstanceWithoutConstructor();
+
+        $this->setPrivate($grant, 'animal', $animal);
+        $this->setPrivate($grant, 'grantedTo', $person);
+        $this->setPrivate($grant, 'status', $status);
+
+        return $grant;
+    }
+
+    private function setPrivate(object $object, string $property, mixed $value): void
+    {
+        $ref = new ReflectionClass($object);
+
+        while (!$ref->hasProperty($property)) {
+            $ref = $ref->getParentClass();
+            if ($ref === false) {
+                throw new \LogicException("Property {$property} not found");
+            }
+        }
+
+        $prop = $ref->getProperty($property);
+        $prop->setAccessible(true);
+        $prop->setValue($object, $value);
+    }
+
+    private function getPrivate(object $object, string $property): mixed
+    {
+        $ref = new ReflectionClass($object);
+
+        while (!$ref->hasProperty($property)) {
+            $ref = $ref->getParentClass();
+            if ($ref === false) {
+                throw new \LogicException("Property {$property} not found");
+            }
+        }
+
+        $prop = $ref->getProperty($property);
+        $prop->setAccessible(true);
+
+        return $prop->getValue($object);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/AccessControl/Stub/AccessGrantRepositoryStub.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/AccessControl/Stub/OrganizationMembershipRepositoryStub.php =====
+<?php
+
+namespace App\Tests\Domain\AccessControl\Stub;
+
+use App\Domain\AccessControl\Repository\OrganizationMembershipRepositoryInterface;
+use App\Entity\Organization;
+use App\Entity\OrganizationMembership;
+use App\Entity\Person;
+
+final class OrganizationMembershipRepositoryStub implements OrganizationMembershipRepositoryInterface
+{
+    private array $memberships = [];
+
+    public function seed(array $memberships): void
+    {
+        $this->memberships = $memberships;
+    }
+
+    public function findActiveMembershipsForUserInOrganization(
+        Person $person,
+        Organization $organization
+    ): array {
+        return array_filter(
+            $this->memberships,
+            fn (OrganizationMembership $membership) =>
+                $membership->getPerson() === $person
+                && $membership->getOrganization() === $organization
+                && $membership->getStatus() === 'active'
+        );
+    }
+
+    public function isAdmin(Person $person, Organization $organization): bool
+    {
+        foreach ($this->memberships as $membership) {
+            if (
+                $membership->getPerson() === $person &&
+                $membership->getOrganization() === $organization &&
+                $membership->getStatus() === 'active' &&
+                $membership->getRole()?->getRoleType() === 'ORG_ADMIN'
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/AccessControl/Stub/OrganizationMembershipRepositoryStub.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/Agenda/AnimalAgendaHistoryTest.php =====
+<?php
+
+namespace Tests\Domain\Animal\Agenda;
+
+use PHPUnit\Framework\TestCase;
+use App\Domain\Animal\Agenda\AnimalAgenda;
+use App\Entity\Animal;
+
+final class AnimalAgendaHistoryTest extends TestCase
+{
+    public function testAgendaKeepsHistoryWhenEntryIsAdded(): void
+    {
+	    $this->markTestSkipped('Legacy AnimalAgenda domain model deprecated.');
+
+        $animal = new Animal();
+        $agenda = AnimalAgenda::createForAnimal($animal);
+
+        $agenda->addEntry(
+            title: 'Vet visit',
+            startsAt: new \DateTimeImmutable('2026-01-10 10:00'),
+            endsAt: new \DateTimeImmutable('2026-01-10 11:00')
+        );
+
+        $history = $agenda->history();
+
+        $this->assertCount(1, $history);
+        $this->assertSame('entry_created', $history[0]->type());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/Agenda/AnimalAgendaHistoryTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/Agenda/AnimalAgendaTest.php =====
+<?php
+
+namespace Tests\Domain\Animal\Agenda;
+
+use App\Domain\Animal\Agenda\AnimalAgenda;
+use App\Domain\Animal\Agenda\AnimalAgendaEntry;
+use App\Entity\Animal;
+use PHPUnit\Framework\TestCase;
+
+final class AnimalAgendaTest extends TestCase
+{
+    public function testAgendaIsAlwaysCreatedForAnimal(): void
+    {
+        $animal = new Animal();
+        $agenda = AnimalAgenda::createForAnimal($animal);
+
+        $this->assertInstanceOf(AnimalAgenda::class, $agenda);
+        $this->assertSame($animal, $agenda->animal());
+    }
+
+    public function testAgendaStartsEmpty(): void
+    {
+        $animal = new Animal();
+        $agenda = AnimalAgenda::createForAnimal($animal);
+
+        $this->assertCount(0, $agenda->entries());
+    }
+
+    public function testAgendaDoesNotAllowDeletionOfEntries(): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage('agenda_entries_cannot_be_deleted');
+
+        $animal = new Animal();
+        $agenda = AnimalAgenda::createForAnimal($animal);
+
+        $entry = AnimalAgendaEntry::create(
+            'Vet visit',
+            new \DateTimeImmutable('2026-01-10 10:00'),
+            new \DateTimeImmutable('2026-01-10 11:00')
+        );
+
+        $agenda->addEntry($entry);
+
+        // O domínio não permite exclusão de entradas
+        $agenda->removeEntry($entry);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/Agenda/AnimalAgendaTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/AnimalParentageTest.php =====
+<?php
+
+namespace App\Tests\Domain\Animal;
+
+use App\Entity\Animal;
+use App\Entity\AnimalParentage;
+use PHPUnit\Framework\TestCase;
+
+final class AnimalParentageTest extends TestCase
+{
+    private function createAnimal(): Animal
+    {
+        return new Animal();
+    }
+
+    public function testCanSetInternalFather(): void
+    {
+        $child  = $this->createAnimal();
+        $father = $this->createAnimal();
+
+        $child->setFatherAnimal($father);
+
+        $this->assertNotNull($child->getFather());
+        $this->assertTrue($child->getFather()->hasInternalParent());
+    }
+
+    public function testCanSetExternalMother(): void
+    {
+        $child = $this->createAnimal();
+
+        $child->setExternalMother(
+            microchipNumber: '123456789',
+            registryIssuer: 'CBKC',
+            registryNumber: 'ABC-001'
+        );
+
+        $this->assertNotNull($child->getMother());
+        $this->assertTrue($child->getMother()->hasExternalIdentification());
+    }
+
+    public function testCannotDefineTwoFathers(): void
+    {
+        $this->expectException(\DomainException::class);
+
+        $child  = $this->createAnimal();
+        $father = $this->createAnimal();
+
+        $child->setFatherAnimal($father);
+        $child->setExternalFather('999', null, null);
+    }
+
+    public function testCannotDefineTwoMothers(): void
+    {
+        $this->expectException(\DomainException::class);
+
+        $child  = $this->createAnimal();
+        $mother = $this->createAnimal();
+
+        $child->setMotherAnimal($mother);
+        $child->setMotherAnimal($mother);
+    }
+
+    public function testCannotMixInternalAndExternalParent(): void
+    {
+        $this->expectException(\DomainException::class);
+
+        $child  = $this->createAnimal();
+        $father = $this->createAnimal();
+
+        $child->setFatherAnimal($father);
+        $child->setExternalFather('123', 'CBKC', 'X');
+    }
+
+    public function testNinhadaWithSameParents(): void
+    {
+        $father = $this->createAnimal();
+        $mother = $this->createAnimal();
+
+        $litter = [
+            $this->createAnimal(),
+            $this->createAnimal(),
+            $this->createAnimal(),
+        ];
+
+        foreach ($litter as $child) {
+            $child->setFatherAnimal($father);
+            $child->setMotherAnimal($mother);
+        }
+
+        foreach ($litter as $child) {
+            $this->assertSame($father, $child->getFather()->getParentAnimal());
+            $this->assertSame($mother, $child->getMother()->getParentAnimal());
+        }
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/AnimalParentageTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/LitterCreationServiceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Domain\Animal;
+
+use App\Domain\Animal\LitterAttributes;
+use App\Domain\Animal\LitterCreationService;
+use App\Domain\Animal\ParentDefinition;
+use App\Entity\Animal;
+use App\Entity\Organization;
+use App\Entity\Person;
+use Doctrine\ORM\EntityManagerInterface;
+use DomainException;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class LitterCreationServiceTest extends KernelTestCase
+{
+    private EntityManagerInterface $em;
+    private LitterCreationService $service;
+
+    protected function setUp(): void
+    {
+	    parent::setUp();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->service = new LitterCreationService($this->em);
+    }
+
+    public function testCreateSingleAnimal(): void
+    {
+        $person = new Person();
+        $person->setFullName('Tester');
+
+        $this->em->persist($person);
+        $this->em->flush();
+
+        $attributes = new LitterAttributes(
+            birthDate: new \DateTimeImmutable('2025-01-10')
+        );
+
+        $litter = $this->service->createLitter(
+            origin: $person,
+            count: 1,
+            attributes: $attributes
+        );
+
+        self::assertSame(1, $litter->getLitterSize());
+        self::assertCount(1, $litter->getAnimals());
+
+        $animal = $litter->getAnimals()->first();
+        self::assertInstanceOf(Animal::class, $animal);
+    }
+
+    public function testCannotCreateLitterWithZeroAnimals(): void
+    {
+        $this->expectException(DomainException::class);
+
+        $person = new Person();
+        $person->setFullName('Tester');
+
+        $attributes = new LitterAttributes(
+            birthDate: new \DateTimeImmutable('2025-01-10')
+        );
+
+        $this->service->createLitter(
+            origin: $person,
+            count: 0,
+            attributes: $attributes
+        );
+    }
+
+    public function testCreateLitterWithInternalParents(): void
+    {
+        $org = new Organization();
+        $org->setName('Breeder');
+        $org->setOrgType(Organization::TYPE_BREEDER);
+
+        $father = new Animal();
+        $mother = new Animal();
+
+        $this->em->persist($org);
+        $this->em->persist($father);
+        $this->em->persist($mother);
+        $this->em->flush();
+
+        $attributes = new LitterAttributes(
+            birthDate: new \DateTimeImmutable('2025-01-10')
+        );
+
+        $litter = $this->service->createLitter(
+            origin: $org,
+            count: 3,
+            attributes: $attributes,
+            father: ParentDefinition::internal($father),
+            mother: ParentDefinition::internal($mother)
+        );
+
+        self::assertSame(3, $litter->getLitterSize());
+
+        foreach ($litter->getAnimals() as $animal) {
+            self::assertTrue($animal->hasFather());
+            self::assertTrue($animal->hasMother());
+        }
+    }
+
+    public function testCannotMixInternalAndInvalidExternalParent(): void
+    {
+        $this->expectException(DomainException::class);
+
+        $org = new Organization();
+        $org->setName('Breeder');
+        $org->setOrgType(Organization::TYPE_BREEDER);
+
+        $father = new Animal();
+
+        $this->em->persist($org);
+        $this->em->persist($father);
+        $this->em->flush();
+
+        $attributes = new LitterAttributes(
+            birthDate: new \DateTimeImmutable('2025-01-10')
+        );
+
+        $this->service->createLitter(
+            origin: $org,
+            count: 1,
+            attributes: $attributes,
+            father: ParentDefinition::internal($father),
+            mother: ParentDefinition::external() // inválido → exceção esperada
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/Animal/LitterCreationServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Domain/Security/AnimalAgendaVoterTest.php =====
+<?php
+
+namespace Tests\Domain\Security;
+
+use App\Entity\Animal;
+use App\Security\Voter\AnimalAgendaVoter;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+
+final class AnimalAgendaVoterTest extends TestCase
+{
+    public function testViewMapsToAnimalViewPermission(): void
+    {
+        $animal = new Animal();
+
+        $auth = $this->createMock(AuthorizationCheckerInterface::class);
+        $auth
+            ->expects($this->once())
+            ->method('isGranted')
+            ->with('ANIMAL_VIEW', $animal)
+            ->willReturn(true);
+
+        $voter = new AnimalAgendaVoter($auth);
+
+        $token = $this->createMock(TokenInterface::class);
+
+        $this->assertSame(
+            AnimalAgendaVoter::ACCESS_GRANTED,
+            $voter->vote($token, $animal, [AnimalAgendaVoter::VIEW])
+        );
+    }
+
+//    public function testEditMapsToAnimalEditPermission(): void
+//    {
+//        $animal = new Animal();
+//
+//        $auth = $this->createMock(AuthorizationCheckerInterface::class);
+//        $auth
+//            ->expects($this->once())
+//            ->method('isGranted')
+//            ->with('ANIMAL_EDIT', $animal)
+//            ->willReturn(true);
+//
+//        $voter = new AnimalAgendaVoter($auth);
+//
+//        $token = $this->createMock(TokenInterface::class);
+//
+//        $this->assertSame(
+//            AnimalAgendaVoter::ACCESS_GRANTED,
+//            $voter->vote($token, $animal, [AnimalAgendaVoter::EDIT])
+//        );
+//    }
+
+    public function testUnsupportedAttributeIsAbstain(): void
+    {
+        $animal = new Animal();
+
+        $auth = $this->createMock(AuthorizationCheckerInterface::class);
+        $auth->expects($this->never())->method('isGranted');
+
+        $voter = new AnimalAgendaVoter($auth);
+
+        $token = $this->createMock(TokenInterface::class);
+
+        $this->assertSame(
+            AnimalAgendaVoter::ACCESS_ABSTAIN,
+            $voter->vote($token, $animal, ['SOME_OTHER_PERMISSION'])
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Domain/Security/AnimalAgendaVoterTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Entity/OrganizationTest.php =====
+<?php
+
+namespace App\Tests\Entity;
+
+use App\Entity\Organization;
+use DomainException;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\TestCase;
+
+#[CoversClass(Organization::class)]
+final class OrganizationTest extends TestCase
+{
+    public function testSetOrgTypeAcceptsValidType(): void
+    {
+        $org = new Organization();
+
+        $org->setOrgType(Organization::TYPE_CLINIC);
+
+        $this->assertSame(Organization::TYPE_CLINIC, $org->getOrgType());
+    }
+
+    public function testSetOrgTypeThrowsForInvalidType(): void
+    {
+        $org = new Organization();
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('organization_invalid_type');
+
+        $org->setOrgType('invalid_type');
+    }
+
+    public function testUpdatedAtIsTouchedWhenOrgTypeChanges(): void
+    {
+        $org = new Organization();
+
+        $before = $org->getUpdatedAt();
+
+        // garantir diferença de tempo observável
+        usleep(1000);
+
+        $org->setOrgType(Organization::TYPE_GROOMER);
+
+        $this->assertGreaterThan($before, $org->getUpdatedAt());
+    }
+
+    public function testUpdatedAtIsTouchedWhenNameChanges(): void
+    {
+        $org = new Organization();
+
+        $before = $org->getUpdatedAt();
+
+        usleep(1000);
+
+        $org->setName('New Organization Name');
+
+        $this->assertGreaterThan($before, $org->getUpdatedAt());
+    }
+
+    public function testUpdatedAtIsTouchedWhenTaxIdChanges(): void
+    {
+        $org = new Organization();
+
+        $before = $org->getUpdatedAt();
+
+        usleep(1000);
+
+        $org->setTaxId('PT123456789');
+
+        $this->assertGreaterThan($before, $org->getUpdatedAt());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Entity/OrganizationTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaApiTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration\AnimalAgenda;
+
+use App\Application\Animal\AnimalCreationService;
+use App\Entity\AnimalType;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\Response;
+
+final class AnimalAgendaApiTest extends WebTestCase
+{
+    public function testTutorCanCreateAgendaEntry(): void
+    {
+        $client = static::createClient();
+        $container = static::getContainer();
+        $em = $container->get('doctrine')->getManager();
+
+        /** @var User $user */
+        $user = $em->getRepository(User::class)->findOneBy([
+            'email' => 'admin@example.com',
+        ]);
+        self::assertNotNull($user);
+
+        /** @var AnimalType $type */
+        $type = $em->getRepository(AnimalType::class)->findOneBy([]);
+        self::assertNotNull($type);
+
+        /** @var AnimalCreationService $animalCreator */
+        $animalCreator = $container->get(AnimalCreationService::class);
+
+        $animal = $animalCreator->create(
+            creator: $user->getPerson(),
+            organization: null,
+            type: $type,
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short',
+            callName: 'Rex'
+        );
+
+        // 🔴 ESSENCIAL EM TESTE FUNCIONAL
+        $em->flush();
+        $em->clear();
+
+        $client->loginUser($user);
+
+        $client->request(
+            'POST',
+            sprintf(
+                '/api/v1/animals/%s/agenda/entries',
+                $animal->getPublicId()
+            ),
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'title'     => 'Vet visit',
+                'starts_at' => '2026-01-10T10:00:00+00:00',
+                'ends_at'   => '2026-01-10T11:00:00+00:00',
+            ])
+        );
+
+        self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaApiTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaApplicationServiceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration\AnimalAgenda;
+
+use App\Application\Animal\Agenda\AnimalAgendaApplicationService;
+use App\Application\Animal\AnimalCreationService;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\AnimalType;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class AnimalAgendaApplicationServiceTest extends KernelTestCase
+{
+    public function testAddEntryThroughApplicationService(): void
+    {
+        self::bootKernel();
+
+        $container = self::getContainer();
+        $em = $container->get('doctrine')->getManager();
+
+        /** @var User $user */
+        $user = $em->getRepository(User::class)->findOneBy([
+            'email' => 'admin@example.com',
+        ]);
+        self::assertNotNull($user);
+
+        /** @var AnimalType $type */
+        $type = $em->getRepository(AnimalType::class)->findOneBy([]);
+        self::assertNotNull($type);
+
+        /** @var AnimalCreationService $animalCreator */
+        $animalCreator = $container->get(AnimalCreationService::class);
+
+        $animal = $animalCreator->create(
+            creator: $user->getPerson(),
+            organization: null,
+            type: $type,
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short',
+            callName: 'Rex'
+        );
+
+        /** @var AnimalAgendaApplicationService $applicationService */
+        $applicationService = $container->get(AnimalAgendaApplicationService::class);
+
+        $applicationService->addEntry(
+            animal: $animal,
+            title: 'Vet visit',
+            startAt: new \DateTimeImmutable('2026-01-10 10:00'),
+            endAt: new \DateTimeImmutable('2026-01-10 11:00')
+        );
+
+        /** @var AnimalAgenda|null $agendaEntity */
+        $agendaEntity = $em->getRepository(AnimalAgenda::class)
+            ->findOneBy(['animal' => $animal]);
+
+        self::assertNotNull($agendaEntity);
+
+        // ✅ ÚNICA responsabilidade aqui: existe histórico?
+        $logCount = $em->getRepository(AnimalAgendaItemActionLog::class)->count([]);
+
+        self::assertGreaterThanOrEqual(1, $logCount);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaApplicationServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaHistoryPersistenceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration\AnimalAgenda;
+
+use App\Application\Animal\Agenda\AnimalAgendaApplicationService;
+use App\Application\Animal\AnimalCreationService;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalAgendaItemActionLog;
+use App\Entity\AnimalType;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class AnimalAgendaHistoryPersistenceTest extends KernelTestCase
+{
+    public function testAgendaHistoryIsPersistedAndRetrieved(): void
+    {
+        self::bootKernel();
+
+        $container = self::getContainer();
+        $em = $container->get('doctrine')->getManager();
+
+        /** @var User $user */
+        $user = $em->getRepository(User::class)->findOneBy(['email' => 'admin@example.com']);
+        self::assertNotNull($user);
+
+        /** @var AnimalType $type */
+        $type = $em->getRepository(AnimalType::class)->findOneBy([]);
+        self::assertNotNull($type);
+
+        /** @var AnimalCreationService $animalCreator */
+        $animalCreator = $container->get(AnimalCreationService::class);
+
+        $animal = $animalCreator->create(
+            creator: $user->getPerson(),
+            organization: null,
+            type: $type,
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short',
+            callName: 'Rex'
+        );
+
+        /** @var AnimalAgendaApplicationService $agendaService */
+        $agendaService = $container->get(AnimalAgendaApplicationService::class);
+
+        $agendaService->addEntry(
+            animal: $animal,
+            title: 'Vet visit',
+            startAt: new \DateTimeImmutable('2026-01-10 10:00'),
+            endAt: new \DateTimeImmutable('2026-01-10 11:00')
+        );
+
+        /** @var AnimalAgenda $agenda */
+        $agenda = $em->getRepository(AnimalAgenda::class)
+            ->findOneBy(['animal' => $animal]);
+
+        self::assertNotNull($agenda);
+
+        /** @var AnimalAgendaItem $item */
+        $item = $em->getRepository(AnimalAgendaItem::class)
+            ->findOneBy(['agenda' => $agenda]);
+
+        self::assertNotNull($item);
+
+        $logs = $em->getRepository(AnimalAgendaItemActionLog::class)
+            ->findBy(['agendaItem' => $item]);
+
+        self::assertCount(1, $logs);
+        self::assertSame('created', $logs[0]->type());
+
+        $payload = $logs[0]->payload();
+        self::assertSame('Vet visit', $payload['title'] ?? null);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaHistoryPersistenceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaPersistenceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration\AnimalAgenda;
+
+use App\Application\Animal\Agenda\AnimalAgendaApplicationService;
+use App\Application\Animal\AnimalCreationService;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalType;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class AnimalAgendaPersistenceTest extends KernelTestCase
+{
+    public function testAgendaIsPersistedAndRetrievedByAnimal(): void
+    {
+        self::bootKernel();
+
+        $container = self::getContainer();
+        $em = $container->get('doctrine')->getManager();
+
+        $user = $em->getRepository(User::class)->findOneBy([
+            'email' => 'admin@example.com',
+        ]);
+        self::assertNotNull($user);
+
+        $type = $em->getRepository(AnimalType::class)->findOneBy([]);
+        self::assertNotNull($type);
+
+        $animalCreator = $container->get(AnimalCreationService::class);
+
+        $animal = $animalCreator->create(
+            creator: $user->getPerson(),
+            organization: null,
+            type: $type,
+            sex: 'male',
+            coatColor: 'brown',
+            coatType: 'short',
+	    callName: 'Rex'
+	);
+
+	$agendaService = $container->get(AnimalAgendaApplicationService::class);
+
+	$agendaService->addEntry(
+		animal: $animal,
+		title: 'First entry',
+		startAt: new \DateTimeImmutable('2026-01-10 10:00'),
+		endAt: new \DateTimeImmutable('2026-01-10 11:00')
+	);
+
+
+
+
+
+
+
+
+
+	$agenda = $em->getRepository(AnimalAgenda::class)
+	      ->findOneBy(['animal' => $animal]);
+
+	self::assertNotNull($agenda);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaPersistenceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaReadTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalAgenda;
+
+use App\Application\Animal\AnimalCreationService;
+use App\Entity\Animal;
+use App\Entity\AnimalType;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\Response;
+
+final class AnimalAgendaReadTest extends WebTestCase
+{
+	public function testTutorCanReadOwnAnimalAgenda(): void
+	{
+		$client = static::createClient();
+		$em = self::getContainer()->get('doctrine')->getManager();
+
+		/** @var User $tutor */
+		$tutor = $this->getUserByEmail('admin@example.com');
+
+		$animal = $this->createAnimalForTutor($tutor);
+
+		$client->loginUser($tutor);
+
+		$client->request(
+			'GET',
+			sprintf('/api/v1/animals/%d/agenda', $animal->getId())
+		);
+
+		self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+		$data = json_decode($client->getResponse()->getContent(), true);
+
+		self::assertIsArray($data);
+		self::assertArrayHasKey('entries', $data);
+		self::assertSame([], $data['entries']);
+	}
+
+
+	public function testTutorCannotReadAgendaOfAnimalWithoutAccess(): void
+	{
+		$client = static::createClient();
+		$em = self::getContainer()->get('doctrine')->getManager();
+
+		/** @var User $realTutor */
+		$realTutor = $this->getUserByEmail('admin@example.com');
+
+		// cria animal do tutor real
+		$animal = $this->createAnimalForTutor($realTutor);
+
+		// cria um usuário realmente diferente (outra pessoa)
+		$otherPerson = (new \App\Entity\Person())->setFullName('Unauthorized Tutor');
+		$unauthorizedTutor = (new \App\Entity\User())
+			->setEmail(uniqid('unauth_', true) . '@test.com')
+			->setPassword('test') // não importa pro loginUser()
+			->setPerson($otherPerson)
+			->setRoles(['ROLE_USER']);
+
+		$em->persist($otherPerson);
+		$em->persist($unauthorizedTutor);
+		$em->flush();
+		$em->clear();
+
+		// recarrega animal pra garantir estado limpo (opcional, mas saudável)
+		$animal = $em->getRepository(\App\Entity\Animal::class)->find($animal->getId());
+		self::assertNotNull($animal);
+
+		$client->loginUser($unauthorizedTutor);
+
+		$client->request(
+			'GET',
+			sprintf('/api/v1/animals/%d/agenda', $animal->getId())
+		);
+
+		self::assertResponseStatusCodeSame(\Symfony\Component\HttpFoundation\Response::HTTP_FORBIDDEN);
+	}
+
+
+	//    public function testTutorCannotReadAgendaOfAnimalWithoutAccess(): void
+	//    {
+	//        $client = static::createClient();
+	//
+	//        /** @var User $realTutor */
+	//        $realTutor = $this->getUserByEmail('admin@example.com');
+	//
+	//        /** @var User $unauthorizedTutor */
+	//        $unauthorizedTutor = $this->getUserByEmail('admin@example.com');
+	//
+	//        $animal = $this->createAnimalForTutor($realTutor);
+	//
+	//        $client->loginUser($unauthorizedTutor);
+	//
+	//        $client->request(
+	//            'GET',
+	//            sprintf('/api/v1/animals/%d/agenda', $animal->getId())
+	//        );
+	//
+	//        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+	//    }
+
+	public function testReadingAgendaOfAnimalWithoutEntriesReturnsEmptyList(): void
+	{
+		$client = static::createClient();
+
+		/** @var User $tutor */
+		$tutor = $this->getUserByEmail('admin@example.com');
+
+		$animal = $this->createAnimalForTutor($tutor);
+
+		$client->loginUser($tutor);
+
+		$client->request(
+			'GET',
+			sprintf('/api/v1/animals/%d/agenda', $animal->getId())
+		);
+
+		self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+		$data = json_decode($client->getResponse()->getContent(), true);
+
+		self::assertSame([], $data['entries']);
+	}
+
+	private function getUserByEmail(string $email): User
+	{
+		$em = self::getContainer()->get('doctrine')->getManager();
+		$user = $em->getRepository(User::class)->findOneBy(['email' => $email]);
+
+		self::assertNotNull($user);
+
+		return $user;
+	}
+
+	private function createAnimalForTutor(User $tutor): Animal
+	{
+		/** @var AnimalCreationService $animalCreationService */
+		$animalCreationService = self::getContainer()->get(AnimalCreationService::class);
+
+		$em = self::getContainer()->get('doctrine')->getManager();
+
+		/** @var AnimalType $type */
+		$type = $em->getRepository(AnimalType::class)->findOneBy([]);
+
+		self::assertNotNull($type);
+
+		return $animalCreationService->create(
+			creator: $tutor->getPerson(),
+			organization: null,
+			type: $type,
+			sex: 'male',
+			coatColor: 'brown',
+			coatType: 'short',
+			callName: 'Test Animal'
+		);
+	}
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalAgenda/AnimalAgendaReadTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferAgendaIsolationTest.php =====
+<?php
+// backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferAgendaIsolationTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+use App\Repository\AnimalTransferRepository;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use App\Entity\AnimalOwnershipSnapshot;
+use Doctrine\ORM\EntityRepository;
+
+/**
+ * Garante a REGRA FUNDAMENTAL:
+ *
+ * - Agenda NÃO acompanha o cão
+ * - Ao aceitar transferência:
+ *   - agenda antiga fica congelada (snapshot)
+ *   - nova agenda começa vazia para o novo tutor
+ */
+final class AcceptAnimalTransferAgendaIsolationTest extends WebTestCase
+{
+    private EntityManagerInterface $em;
+    private AnimalTransferRepository $transferRepo;
+    private EntityRepository $snapshotRepo;
+    protected function setUp(): void
+    {
+ 
+
+        self::markTestSkipped('Agenda do animal ainda não esta implementada no dominio');
+	parent::setUp();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->transferRepo = self::getContainer()->get(AnimalTransferRepository::class);
+        $this->snapshotRepo = $this->em->getRepository(AnimalOwnershipSnapshot::class);
+
+    }
+
+    public function testAgendaIsIsolatedAfterAcceptingTransfer(): void
+    {
+        $ctx = $this->seedTransferWithAgendaHistory();
+
+        $client = static::createClient();
+        $client->loginUser($ctx['toUser']);
+
+        $client->request(
+            'POST',
+            '/api/v1/animal-transfers/' . $ctx['transferPublicId'] . '/accept'
+        );
+
+        self::assertResponseStatusCodeSame(200);
+
+        /** @var AnimalTransfer $transfer */
+        $transfer = $this->transferRepo->findOneBy(['publicId' => $ctx['transferPublicId']]);
+        self::assertSame('accepted', $transfer->getStatus());
+
+        /** @var Animal $animal */
+        $animal = $this->em->getRepository(Animal::class)->find($ctx['animalId']);
+        self::assertNotNull($animal);
+
+        // Tutor foi alterado
+        self::assertSame(
+            $ctx['toPerson']->getId(),
+            $animal->getTutor()?->getId()
+        );
+
+        // Snapshot criado (agenda antiga congelada)
+        $snapshots = $this->snapshotRepo->findBy(['animal' => $animal]);
+        self::assertCount(1, $snapshots);
+
+        $snapshot = $snapshots[0];
+        $data = $snapshot->getSnapshot();
+
+        self::assertArrayHasKey('agenda', $data);
+        self::assertCount(2, $data['agenda']); // histórico antigo
+
+        // Agenda ATUAL do animal deve estar vazia
+        self::assertCount(
+            0,
+            $animal->getAgendaEntries(),
+            'Agenda nova deve iniciar vazia após transferência'
+        );
+    }
+
+    private function seedTransferWithAgendaHistory(): array
+    {
+        $fromPerson = new Person();
+        $fromPerson->setFullName('Old Tutor');
+
+        $toPerson = new Person();
+        $toPerson->setFullName('New Tutor');
+
+        $fromUser = new User();
+        $fromUser->setEmail(uniqid('from_', true) . '@test.com');
+        $fromUser->setPerson($fromPerson);
+
+        $toUser = new User();
+        $toUser->setEmail(uniqid('to_', true) . '@test.com');
+        $toUser->setPerson($toPerson);
+
+        $animal = new Animal();
+        $animal->assignTutor($fromPerson);
+
+        // Simula histórico de agenda (mock conceitual)
+        $animal->addAgendaEntry(['type' => 'boarding', 'date' => '2025-01-10']);
+        $animal->addAgendaEntry(['type' => 'vet', 'date' => '2025-02-02']);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        $transferPublicId = 'TRF_AGENDA_' . bin2hex(random_bytes(4));
+
+        $transfer = new AnimalTransfer(
+            publicId: $transferPublicId,
+            animal: $animal,
+            initiatedBy: $fromUser,
+            fromPerson: $fromPerson,
+            fromOrganization: null,
+            toPerson: $toPerson,
+            toOrganization: null,
+            note: 'agenda-isolation-test'
+        );
+
+        $this->em->persist($transfer);
+        $this->em->flush();
+
+        return [
+            'animalId'         => $animal->getId(),
+            'transferPublicId' => $transferPublicId,
+            'fromPerson'       => $fromPerson,
+            'toPerson'         => $toPerson,
+            'fromUser'         => $fromUser,
+            'toUser'           => $toUser,
+        ];
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferAgendaIsolationTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferClinicalAccessTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalTransfer;
+use App\Entity\ClinicalDocument;
+use App\Entity\Person;
+use App\Entity\User;
+
+final class AcceptAnimalTransferClinicalAccessTest extends BaseAnimalTransferWebTestCase
+{
+    public function testClinicalDocumentsRemainAttachedToAnimalAfterTransfer(): void
+    {
+        $fromPerson = new Person();
+        $fromPerson->setFullName('Original Tutor');
+
+        $fromUser = new User();
+        $fromUser->setEmail(uniqid('from_', true) . '@test.com');
+        $fromUser->setPassword('test');
+        $fromUser->setPerson($fromPerson);
+        if (method_exists($fromUser, 'setRoles')) {
+            $fromUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $toPerson = new Person();
+        $toPerson->setFullName('New Tutor');
+
+        $toUser = new User();
+        $toUser->setEmail(uniqid('to_', true) . '@test.com');
+        $toUser->setPassword('test');
+        $toUser->setPerson($toPerson);
+        if (method_exists($toUser, 'setRoles')) {
+            $toUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $animal = new Animal();
+        $animal->assignTutor($fromPerson);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        // 🔒 CAPTURA CANÔNICA DA IDENTIDADE
+        $originalAnimalPublicId = $animal->getPublicId();
+
+        $doc = new ClinicalDocument(
+            publicId: 'CD_' . bin2hex(random_bytes(6)),
+            animal: $animal,
+            s3ObjectKey: 's3://bucket/key.pdf',
+            checksum: 'deadbeef',
+            mimeType: 'application/pdf',
+            category: 'report',
+            createdBy: $fromUser
+        );
+
+        $this->em->persist($doc);
+        $this->em->flush();
+
+        $transferPublicId = 'TRF_CLIN_' . bin2hex(random_bytes(4));
+
+        $transfer = new AnimalTransfer(
+            $transferPublicId,
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'clinical-test'
+        );
+
+        $this->em->persist($transfer);
+        $this->em->flush();
+
+        $this->client->loginUser($toUser);
+        $this->client->request('POST', '/api/v1/transfers/' . $transferPublicId . '/accept');
+
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+
+        /** @var ClinicalDocument $reloadedDoc */
+        $reloadedDoc = $this->em
+            ->getRepository(ClinicalDocument::class)
+            ->findOneBy(['s3ObjectKey' => 's3://bucket/key.pdf']);
+
+        self::assertNotNull($reloadedDoc);
+
+        $reloadedAnimal = $reloadedDoc->getAnimal();
+
+        // ✅ IDENTIDADE IMUTÁVEL DO AGREGADO
+        self::assertSame(
+            $originalAnimalPublicId,
+            $reloadedAnimal->getPublicId()
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferClinicalAccessTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferSnapshotTest.php =====
+<?php
+// path: tests/Integration/AnimalTransfer/AcceptAnimalTransferSnapshotTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalPersonLink;
+use App\Entity\AnimalOwnershipSnapshot;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+
+final class AcceptAnimalTransferSnapshotTest extends BaseAnimalTransferWebTestCase
+{
+    public function testAcceptTransferMovesTutorAndDoesNotCreateSnapshotInCurrentModel(): void
+    {
+        $fromPerson = (new Person())->setFullName('Original Tutor');
+        $toPerson   = (new Person())->setFullName('New Tutor');
+
+        $fromUser = (new User())
+            ->setEmail(uniqid('from_', true) . '@test.com')
+            ->setPassword('test')
+            ->setPerson($fromPerson)
+            ->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+
+        $toUser = (new User())
+            ->setEmail(uniqid('to_', true) . '@test.com')
+            ->setPassword('test')
+            ->setPerson($toPerson)
+            ->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+
+        $animal = new Animal();
+
+        $ownerLink = new AnimalPersonLink();
+        $ownerLink->setAnimal($animal);
+        $ownerLink->setPerson($fromPerson);
+        $ownerLink->setRelationType('owner');
+
+        // CRÍTICO: manter a relação bidirecional consistente em memória
+        $animal->addPersonLink($ownerLink);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->persist($ownerLink);
+        $this->em->flush();
+
+        $animalId = $animal->getId();
+        self::assertNotNull($animalId);
+
+        $publicId = 'TRF_ACCEPT_SNAP_' . bin2hex(random_bytes(4));
+        $transfer = new AnimalTransfer(
+            $publicId,
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'accept-snapshot-test'
+        );
+
+        $this->em->persist($transfer);
+        $this->em->flush();
+
+        $this->client->loginUser($toUser);
+        $this->client->request('POST', '/api/v1/transfers/' . $publicId . '/accept');
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+
+        /** @var Animal $reloaded */
+        $reloaded = $this->em->getRepository(Animal::class)->find($animalId);
+        self::assertNotNull($reloaded);
+
+        self::assertNotNull($reloaded->getTutor());
+        self::assertSame('New Tutor', $reloaded->getTutor()->getFullName());
+
+        // Modelo atual: serviço NÃO cria snapshot
+        $snapshots = $this->em->getRepository(AnimalOwnershipSnapshot::class)->findBy(['animal' => $reloaded]);
+        self::assertCount(0, $snapshots);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferSnapshotTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferTest.php =====
+<?php
+// path: tests/Integration/AnimalTransfer/AcceptAnimalTransferTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalPersonLink;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+
+final class AcceptAnimalTransferTest extends WebTestCase
+{
+    public function testDestinationCanAcceptAnimalTransfer(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get('doctrine')->getManager();
+
+        $fromPerson = (new Person())->setFullName('Original Tutor');
+        $toPerson   = (new Person())->setFullName('New Tutor');
+
+        $fromUser = (new User())
+            ->setEmail(uniqid('from_', true).'@test.com')
+            ->setPassword('test')
+            ->setPerson($fromPerson);
+
+        $toUser = (new User())
+            ->setEmail(uniqid('to_', true).'@test.com')
+            ->setPassword('test')
+            ->setPerson($toPerson);
+
+        $animal = new Animal();
+
+        $ownerLink = new AnimalPersonLink();
+        $ownerLink->setAnimal($animal);
+        $ownerLink->setPerson($fromPerson);
+        $ownerLink->setRelationType('owner');
+
+        /**
+         * CRÍTICO:
+         * O modelo usa associação bidirecional (Animal <-> AnimalPersonLink).
+         * Se você só setar o lado owning (link->setAnimal) e NÃO alimentar o inverse side,
+         * o collection $animal->getPersonLinks() pode ficar vazio em memória.
+         *
+         * Isso quebra:
+         * - AnimalVoter (usa $animal->getPersonLinks())
+         * - AnimalTransferService (itera $animal->getPersonLinks() para encerrar owner ativo)
+         */
+        $animal->addPersonLink($ownerLink);
+
+        $em->persist($fromPerson);
+        $em->persist($toPerson);
+        $em->persist($fromUser);
+        $em->persist($toUser);
+        $em->persist($animal);
+        $em->persist($ownerLink);
+        $em->flush();
+
+        $animalId = $animal->getId();
+        self::assertNotNull($animalId);
+
+        $transfer = new AnimalTransfer(
+            'TRF_ACCEPT_'.bin2hex(random_bytes(4)),
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'accept-test'
+        );
+
+        $em->persist($transfer);
+        $em->flush();
+
+        $client->loginUser($toUser);
+        $client->request('POST', '/api/v1/transfers/'.$transfer->getPublicId().'/accept');
+        self::assertResponseIsSuccessful();
+
+        $em->clear();
+
+        /** @var Animal $reloaded */
+        $reloaded = $em->getRepository(Animal::class)->find($animalId);
+        self::assertNotNull($reloaded);
+
+        self::assertNotNull($reloaded->getTutor());
+        self::assertSame('New Tutor', $reloaded->getTutor()->getFullName());
+
+        $activeOwners = $reloaded->getPersonLinks()->filter(
+            fn (AnimalPersonLink $l) => $l->getRelationType() === 'owner' && $l->isActive()
+        );
+        self::assertCount(1, $activeOwners);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AcceptAnimalTransferTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AnimalTransferAclTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+
+final class AnimalTransferAclTest extends BaseAnimalTransferWebTestCase
+{
+    public function testUnauthenticatedCannotViewAcceptRejectCancel(): void
+    {
+        $ctx = $this->seedPendingTransfer();
+
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['transferPublicId']);
+        self::assertResponseStatusCodeSame(302);
+        self::assertResponseRedirects('/login');
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/accept');
+        self::assertResponseStatusCodeSame(302);
+        self::assertResponseRedirects('/login');
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/reject');
+        self::assertResponseStatusCodeSame(302);
+        self::assertResponseRedirects('/login');
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/cancel');
+        self::assertResponseStatusCodeSame(302);
+        self::assertResponseRedirects('/login');
+    }
+
+    public function testThirdPartyCannotViewAcceptRejectCancel(): void
+    {
+        $ctx = $this->seedPendingTransfer();
+
+        $thirdPerson = new Person();
+        $thirdPerson->setFullName('Third Party');
+
+        $thirdUser = new User();
+        $thirdUser->setEmail(uniqid('third_', true) . '@test.com');
+        $thirdUser->setPassword('test');
+        $thirdUser->setPerson($thirdPerson);
+        if (method_exists($thirdUser, 'setRoles')) {
+            $thirdUser->setRoles(['ROLE_USER']);
+        }
+
+        $this->em->persist($thirdPerson);
+        $this->em->persist($thirdUser);
+        $this->em->flush();
+
+        $this->client->loginUser($thirdUser);
+
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['transferPublicId']);
+        self::assertResponseStatusCodeSame(403);
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/accept');
+        self::assertResponseStatusCodeSame(403);
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/reject');
+        self::assertResponseStatusCodeSame(403);
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/cancel');
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    public function testOriginCanViewButCannotAcceptOrReject(): void
+    {
+        $ctx = $this->seedPendingTransfer();
+
+        $this->client->loginUser($ctx['fromUser']);
+
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['transferPublicId']);
+        self::assertResponseIsSuccessful();
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/accept');
+        self::assertResponseStatusCodeSame(403);
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/reject');
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    public function testDestinationCanViewAndAcceptRejectButCannotCancel(): void
+    {
+        $ctx = $this->seedPendingTransfer();
+
+        $this->client->loginUser($ctx['toUser']);
+
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['transferPublicId']);
+        self::assertResponseIsSuccessful();
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/cancel');
+        self::assertResponseStatusCodeSame(403);
+
+        $this->client->request('POST', '/api/v1/transfers/' . $ctx['transferPublicId'] . '/accept');
+        self::assertNotSame(403, $this->client->getResponse()->getStatusCode());
+    }
+
+    private function seedPendingTransfer(): array
+    {
+        $fromPerson = new Person();
+        $fromPerson->setFullName('Origin Tutor');
+
+        $toPerson = new Person();
+        $toPerson->setFullName('Destination Tutor');
+
+        $fromUser = new User();
+        $fromUser->setEmail('origin_acl_' . uniqid('', true) . '@test.com');
+        $fromUser->setPassword('test');
+        $fromUser->setPerson($fromPerson);
+        if (method_exists($fromUser, 'setRoles')) {
+            $fromUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $toUser = new User();
+        $toUser->setEmail('destination_acl_' . uniqid('', true) . '@test.com');
+        $toUser->setPassword('test');
+        $toUser->setPerson($toPerson);
+        if (method_exists($toUser, 'setRoles')) {
+            $toUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $animal = new Animal();
+        $animal->assignTutor($fromPerson);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        $publicId = 'TRF_ACL_' . bin2hex(random_bytes(4));
+
+        $t = new AnimalTransfer(
+            $publicId,
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'ACL test'
+        );
+
+        $this->em->persist($t);
+        $this->em->flush();
+
+        return [
+            'transferPublicId' => $publicId,
+            'fromUser' => $fromUser,
+            'toUser' => $toUser,
+        ];
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/AnimalTransferAclTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/BaseAnimalTransferWebTestCase.php =====
+<?php
+// tests/Integration/AnimalTransfer/BaseAnimalTransferWebTestCase.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+
+/**
+ * Base para testes Web (Kernel + Client) de AnimalTransfer.
+ *
+ * Regra: NÃO chamar bootKernel() manualmente.
+ * O kernel deve ser bootado 1x via createClient().
+ */
+abstract class BaseAnimalTransferWebTestCase extends WebTestCase
+{
+    protected KernelBrowser $client;
+    protected EntityManagerInterface $em;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->client = static::createClient();
+
+        /** @var EntityManagerInterface $em */
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->em = $em;
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/BaseAnimalTransferWebTestCase.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/CancelAnimalTransferSnapshotTest.php =====
+<?php
+// path: tests/Integration/AnimalTransfer/CancelAnimalTransferSnapshotTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalPersonLink;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+
+final class CancelAnimalTransferSnapshotTest extends WebTestCase
+{
+    public function testCancelTransferDoesNotChangeOwner(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get('doctrine')->getManager();
+
+        $owner = (new Person())->setFullName('Tutor');
+        $candidate = (new Person())->setFullName('Candidate');
+
+        $fromUser = (new User())
+            ->setEmail(uniqid('from_', true).'@test.com')
+            ->setPassword('test')
+            ->setPerson($owner);
+
+        $animal = new Animal();
+
+        $link = new AnimalPersonLink();
+        $link->setAnimal($animal);
+        $link->setPerson($owner);
+        $link->setRelationType('owner');
+
+        $em->persist($owner);
+        $em->persist($candidate);
+        $em->persist($fromUser);
+        $em->persist($animal);
+        $em->persist($link);
+        $em->flush();
+
+        $animalId = $animal->getId();
+        self::assertNotNull($animalId);
+
+        $transfer = new AnimalTransfer(
+            'TRF_CANCEL_'.bin2hex(random_bytes(4)),
+            $animal,
+            $fromUser,
+            $owner,
+            null,
+            $candidate,
+            null,
+            null
+        );
+
+        $em->persist($transfer);
+        $em->flush();
+
+        $client->loginUser($fromUser);
+        $client->request('POST', '/api/v1/transfers/'.$transfer->getPublicId().'/cancel');
+        self::assertResponseIsSuccessful();
+
+        $em->clear();
+        /** @var Animal $reloaded */
+        $reloaded = $em->getRepository(Animal::class)->find($animalId);
+        self::assertNotNull($reloaded);
+
+        self::assertSame($owner->getId(), $reloaded->getTutor()?->getId());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/CancelAnimalTransferSnapshotTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/CancelAnimalTransferTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+
+final class CancelAnimalTransferTest extends BaseAnimalTransferWebTestCase
+{
+    public function testOriginCanCancelPendingAnimalTransfer(): void
+    {
+        $fromPerson = new Person();
+        $fromPerson->setFullName('Original Tutor');
+
+        $fromUser = new User();
+        $fromUser->setEmail(uniqid('from_', true) . '@test.com');
+        $fromUser->setPassword('test');
+        $fromUser->setPerson($fromPerson);
+        if (method_exists($fromUser, 'setRoles')) {
+            $fromUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $toPerson = new Person();
+        $toPerson->setFullName('Candidate Tutor');
+
+        $toUser = new User();
+        $toUser->setEmail(uniqid('to_', true) . '@test.com');
+        $toUser->setPassword('test');
+        $toUser->setPerson($toPerson);
+        if (method_exists($toUser, 'setRoles')) {
+            $toUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $animal = new Animal();
+        $animal->assignTutor($fromPerson);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        $publicId = 'TRF_CANCEL_' . bin2hex(random_bytes(4));
+
+        $transfer = new AnimalTransfer(
+            $publicId,
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'cancel-test'
+        );
+
+        $this->em->persist($transfer);
+        $this->em->flush();
+
+        $this->client->loginUser($fromUser);
+        $this->client->request('POST', '/api/v1/transfers/' . $publicId . '/cancel');
+
+        self::assertResponseIsSuccessful();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/CancelAnimalTransferTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/RejectAnimalTransferSnapshotTest.php =====
+<?php
+// path: tests/Integration/AnimalTransfer/RejectAnimalTransferSnapshotTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalPersonLink;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+
+final class RejectAnimalTransferSnapshotTest extends WebTestCase
+{
+    public function testRejectTransferDoesNotChangeOwner(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get('doctrine')->getManager();
+
+        $owner = (new Person())->setFullName('Tutor');
+        $candidate = (new Person())->setFullName('Candidate');
+
+        $fromUser = (new User())
+            ->setEmail(uniqid('from_', true).'@test.com')
+            ->setPassword('test')
+            ->setPerson($owner);
+
+        $toUser = (new User())
+            ->setEmail(uniqid('to_', true).'@test.com')
+            ->setPassword('test')
+            ->setPerson($candidate);
+
+        $animal = new Animal();
+
+        $link = new AnimalPersonLink();
+        $link->setAnimal($animal);
+        $link->setPerson($owner);
+        $link->setRelationType('owner');
+
+        $em->persist($owner);
+        $em->persist($candidate);
+        $em->persist($fromUser);
+        $em->persist($toUser);
+        $em->persist($animal);
+        $em->persist($link);
+        $em->flush();
+
+        $animalId = $animal->getId();
+        self::assertNotNull($animalId);
+
+        $transfer = new AnimalTransfer(
+            'TRF_REJECT_'.bin2hex(random_bytes(4)),
+            $animal,
+            $fromUser,
+            $owner,
+            null,
+            $candidate,
+            null,
+            null
+        );
+
+        $em->persist($transfer);
+        $em->flush();
+
+        $client->loginUser($toUser);
+        $client->request('POST', '/api/v1/transfers/'.$transfer->getPublicId().'/reject');
+        self::assertResponseIsSuccessful();
+
+        $em->clear();
+        /** @var Animal $reloaded */
+        $reloaded = $em->getRepository(Animal::class)->find($animalId);
+        self::assertNotNull($reloaded);
+
+        self::assertSame($owner->getId(), $reloaded->getTutor()?->getId());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/RejectAnimalTransferSnapshotTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/RejectAnimalTransferTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+
+final class RejectAnimalTransferTest extends BaseAnimalTransferWebTestCase
+{
+    public function testDestinationCanRejectAnimalTransfer(): void
+    {
+        $fromPerson = new Person();
+        $fromPerson->setFullName('Original Tutor');
+
+        $fromUser = new User();
+        $fromUser->setEmail(uniqid('from_', true) . '@test.com');
+        $fromUser->setPassword('test');
+        $fromUser->setPerson($fromPerson);
+        if (method_exists($fromUser, 'setRoles')) {
+            $fromUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $toPerson = new Person();
+        $toPerson->setFullName('Candidate Tutor');
+
+        $toUser = new User();
+        $toUser->setEmail(uniqid('to_', true) . '@test.com');
+        $toUser->setPassword('test');
+        $toUser->setPerson($toPerson);
+        if (method_exists($toUser, 'setRoles')) {
+            $toUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $animal = new Animal();
+        $animal->assignTutor($fromPerson);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        $publicId = 'TRF_REJECT_' . bin2hex(random_bytes(4));
+
+        $transfer = new AnimalTransfer(
+            $publicId,
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'reject-test'
+        );
+
+        $this->em->persist($transfer);
+        $this->em->flush();
+
+        $this->client->loginUser($toUser);
+        $this->client->request('POST', '/api/v1/transfers/' . $publicId . '/reject');
+
+        self::assertResponseIsSuccessful();
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/RejectAnimalTransferTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/ViewAnimalTransferTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\AnimalTransfer;
+
+use App\Entity\Animal;
+use App\Entity\AnimalTransfer;
+use App\Entity\Person;
+use App\Entity\User;
+
+final class ViewAnimalTransferTest extends BaseAnimalTransferWebTestCase
+{
+    public function testOriginCanViewTransfer(): void
+    {
+        $ctx = $this->seedTransfer();
+
+        $this->client->loginUser($ctx['fromUser']);
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['publicId']);
+
+        self::assertResponseIsSuccessful();
+    }
+
+    public function testDestinationCanViewTransfer(): void
+    {
+        $ctx = $this->seedTransfer();
+
+        $this->client->loginUser($ctx['toUser']);
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['publicId']);
+
+        self::assertResponseIsSuccessful();
+    }
+
+    public function testThirdPartyCannotViewTransfer(): void
+    {
+        $ctx = $this->seedTransfer();
+
+        $thirdPerson = new Person();
+        $thirdPerson->setFullName('Intruder');
+
+        $thirdUser = new User();
+        $thirdUser->setEmail(uniqid('intruder_', true) . '@test.com');
+        $thirdUser->setPassword('test');
+        $thirdUser->setPerson($thirdPerson);
+        if (method_exists($thirdUser, 'setRoles')) {
+            $thirdUser->setRoles(['ROLE_USER']);
+        }
+
+        $this->em->persist($thirdPerson);
+        $this->em->persist($thirdUser);
+        $this->em->flush();
+
+        $this->client->loginUser($thirdUser);
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['publicId']);
+
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    public function testUnauthenticatedCannotViewTransfer(): void
+    {
+        $ctx = $this->seedTransfer();
+
+        $this->client->request('GET', '/api/v1/transfers/' . $ctx['publicId']);
+        self::assertResponseStatusCodeSame(302);
+        self::assertResponseRedirects('/login');
+    }
+
+    private function seedTransfer(): array
+    {
+        $fromPerson = new Person();
+        $fromPerson->setFullName('Origin');
+
+        $toPerson = new Person();
+        $toPerson->setFullName('Destination');
+
+        $fromUser = new User();
+        $fromUser->setEmail(uniqid('from_', true) . '@test.com');
+        $fromUser->setPassword('test');
+        $fromUser->setPerson($fromPerson);
+        if (method_exists($fromUser, 'setRoles')) {
+            $fromUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $toUser = new User();
+        $toUser->setEmail(uniqid('to_', true) . '@test.com');
+        $toUser->setPassword('test');
+        $toUser->setPerson($toPerson);
+        if (method_exists($toUser, 'setRoles')) {
+            $toUser->setRoles(['ROLE_USER', 'ROLE_TUTOR']);
+        }
+
+        $animal = new Animal();
+        $animal->assignTutor($fromPerson);
+
+        $this->em->persist($fromPerson);
+        $this->em->persist($toPerson);
+        $this->em->persist($fromUser);
+        $this->em->persist($toUser);
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        $publicId = 'TRF_VIEW_' . bin2hex(random_bytes(4));
+
+        $transfer = new AnimalTransfer(
+            $publicId,
+            $animal,
+            $fromUser,
+            $fromPerson,
+            null,
+            $toPerson,
+            null,
+            'view-test'
+        );
+
+        $this->em->persist($transfer);
+        $this->em->flush();
+
+        return [
+            'publicId' => $publicId,
+            'fromUser' => $fromUser,
+            'toUser' => $toUser,
+        ];
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/AnimalTransfer/ViewAnimalTransferTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterAnonymousTest.php =====
+<?php
+// /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterAnonymousTest.php
+
+namespace App\Tests\Integration\Security\AnimalVoter;
+
+use App\Entity\Animal;
+use App\Security\Permission\PermissionCatalog;
+use App\Tests\Integration\Security\BaseAnimalVoterTest;
+
+final class AnimalVoterAnonymousTest extends BaseAnimalVoterTest
+{
+    public function testRandomUserHasNoAccess(): void
+    {
+        $user = TestFixtures::randomUser($this->em);
+
+        $animal = new Animal();
+        $this->em->persist($animal);
+        $this->em->flush();
+
+        $this->authenticate($user);
+
+        $this->assertDenied(PermissionCatalog::ANIMAL_VIEW, $animal);
+        $this->assertDenied(PermissionCatalog::ANIMAL_EDIT, $animal);
+        $this->assertDenied(PermissionCatalog::ANIMAL_DELETE, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_CREATE, Animal::class);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterAnonymousTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterOrganizationTest.php =====
+<?php
+// /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterOrganizationTest.php
+
+namespace App\Tests\Integration\Security\AnimalVoter;
+
+use App\Entity\Animal;
+use App\Security\Permission\PermissionCatalog;
+use App\Tests\Integration\Security\BaseAnimalVoterTest;
+
+final class AnimalVoterOrganizationTest extends BaseAnimalVoterTest
+{
+    public function testOrgOwnerHasFullAccess(): void
+    {
+        [$user, $animal] = TestFixtures::orgUser('ORG_OWNER', $this->em);
+
+        $this->authenticate($user);
+
+        $this->assertGranted(PermissionCatalog::ANIMAL_VIEW, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_EDIT, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_DELETE, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_CREATE, Animal::class);
+    }
+
+    public function testOrgAdminHasLimitedAccess(): void
+    {
+        [$user, $animal] = TestFixtures::orgUser('ORG_ADMIN', $this->em);
+
+        $this->authenticate($user);
+
+        $this->assertGranted(PermissionCatalog::ANIMAL_VIEW, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_EDIT, $animal);
+        $this->assertDenied(PermissionCatalog::ANIMAL_DELETE, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_CREATE, Animal::class);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterOrganizationTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterStaffTest.php =====
+<?php
+// /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterStaffTest.php
+
+namespace App\Tests\Integration\Security\AnimalVoter;
+
+use App\Security\Permission\PermissionCatalog;
+use App\Tests\Integration\Security\BaseAnimalVoterTest;
+
+final class AnimalVoterStaffTest extends BaseAnimalVoterTest
+{
+    public function testStaffCanOnlyView(): void
+    {
+        [$user, $animal] = TestFixtures::orgUser('GROOMER', $this->em);
+
+        $this->authenticate($user);
+
+        $this->assertGranted(PermissionCatalog::ANIMAL_VIEW, $animal);
+        $this->assertDenied(PermissionCatalog::ANIMAL_EDIT, $animal);
+        $this->assertDenied(PermissionCatalog::ANIMAL_DELETE, $animal);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterStaffTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterTutorTest.php =====
+<?php
+// path: tests/Integration/Security/AnimalVoter/AnimalVoterTutorTest.php
+
+namespace App\Tests\Integration\Security\AnimalVoter;
+
+use App\Entity\Animal;
+use App\Security\Permission\PermissionCatalog;
+use App\Tests\Integration\Security\BaseAnimalVoterTest;
+
+final class AnimalVoterTutorTest extends BaseAnimalVoterTest
+{
+    public function testTutorPermissionsWhenTutorIsDataOwner(): void
+    {
+        [$user, $animal] = TestFixtures::tutorOutsideOrganization($this->em);
+
+        $this->authenticate($user);
+
+        $this->assertGranted(PermissionCatalog::ANIMAL_VIEW, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_EDIT, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_DELETE, $animal);
+        $this->assertGranted(PermissionCatalog::ANIMAL_CREATE, Animal::class);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/AnimalVoterTutorTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/TestFixtures.php =====
+<?php
+// path: tests/Integration/Security/AnimalVoter/TestFixtures.php
+
+namespace App\Tests\Integration\Security\AnimalVoter;
+
+use App\Entity\Animal;
+use App\Entity\AnimalPersonLink;
+use App\Entity\Organization;
+use App\Entity\OrganizationMembership;
+use App\Entity\OrganizationRole;
+use App\Entity\Person;
+use App\Entity\User;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class TestFixtures extends KernelTestCase
+{
+    private static function em(?EntityManagerInterface $em): EntityManagerInterface
+    {
+        if ($em instanceof EntityManagerInterface) {
+            return $em;
+        }
+
+        if (!self::$booted) {
+            self::bootKernel();
+        }
+
+        /** @var EntityManagerInterface $resolved */
+        $resolved = self::getContainer()->get(EntityManagerInterface::class);
+
+        return $resolved;
+    }
+
+    /**
+     * Usuário aleatório (autenticável), sem vínculos com Animal/Org.
+     */
+    public static function randomUser(?EntityManagerInterface $em = null): User
+    {
+        $em = self::em($em);
+
+        $person = new Person();
+        $person->setFullName('Random User');
+
+        $user = new User();
+        $user->setEmail(uniqid('random_', true) . '@test.com');
+        $user->setPassword('test');
+        $user->setPerson($person);
+
+        $em->persist($person);
+        $em->persist($user);
+        $em->flush();
+
+        return $user;
+    }
+
+    /**
+     * Tutor fora de organização (titular do dado).
+     * Retorna [User, Animal]
+     */
+    public static function tutorOutsideOrganization(?EntityManagerInterface $em = null): array
+    {
+        $em = self::em($em);
+
+        $animal = new Animal();
+
+        $person = new Person();
+        $person->setFullName('Tutor');
+
+        $user = new User();
+        $user->setEmail(uniqid('tutor_', true) . '@test.com');
+        $user->setPassword('test');
+        $user->setPerson($person);
+
+        $link = new AnimalPersonLink();
+        $link->setAnimal($animal);
+        $link->setPerson($person);
+        $link->setRelationType('owner'); // modelo real do tutor soberano
+
+        // CRÍTICO: garantir inverse side preenchido (AnimalVoter usa $animal->getPersonLinks())
+        $animal->addPersonLink($link);
+
+        $em->persist($animal);
+        $em->persist($person);
+        $em->persist($user);
+        $em->persist($link);
+        $em->flush();
+
+        return [$user, $animal];
+    }
+
+    /**
+     * Cenário de organização: usuário membro com roleType informado e um Animal pertencente à organização.
+     * Retorna [User, Animal, Organization]
+     */
+    public static function orgUser(string $roleType, ?EntityManagerInterface $em = null): array
+    {
+        $em = self::em($em);
+
+        $org = new Organization();
+        $org->setName('Org');
+        $org->setOrgType(Organization::TYPE_CLINIC);
+
+        $role = new OrganizationRole();
+        $role->setOrganization($org);
+        $role->setRoleType($roleType);
+
+        $person = new Person();
+        $person->setFullName('Org User');
+
+        $user = new User();
+        $user->setEmail(uniqid('org_', true) . '@test.com');
+        $user->setPassword('test');
+        $user->setPerson($person);
+
+        $membership = new OrganizationMembership();
+        $membership->setOrganization($org);
+        $membership->setPerson($person);
+        $membership->setRole($role);
+
+        $animal = new Animal();
+        $animal->setOrganization($org);
+
+        $em->persist($org);
+        $em->persist($role);
+        $em->persist($person);
+        $em->persist($user);
+        $em->persist($membership);
+        $em->persist($animal);
+        $em->flush();
+
+        return [$user, $animal, $org];
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/TestFixtures.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/TutorAccessTest.php =====
+<?php
+
+namespace App\Tests\Integration\Security\AnimalVoter;
+
+use App\Entity\Organization;
+use App\Security\Permission\PermissionCatalog;
+use App\Tests\Integration\Security\BaseSecurityIntegrationTest;
+
+final class TutorAccessTest extends BaseSecurityIntegrationTest
+{
+	public function testTutorCannotViewOrganizationAnimalWithoutShare(): void
+	{
+		[$user, $animal] = TestFixtures::tutorOutsideOrganization($this->em);
+
+		// força animal a pertencer a uma organização
+		$org = new Organization();
+		$org->setName('Org');
+		$org->setOrgType(Organization::TYPE_CLINIC);
+
+		$this->em->persist($org);
+		$this->em->flush();
+
+		$animal->setOrganization($org);
+		$this->em->flush();
+
+		$this->authenticate($user);
+
+		$auth = self::getContainer()->get('security.authorization_checker');
+
+		self::assertFalse(
+			$auth->isGranted(PermissionCatalog::ANIMAL_VIEW->value, $animal),
+			'Tutor should NOT view organization-owned animal without explicit sharing'
+		);
+
+	}
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/AnimalVoter/TutorAccessTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/BaseAnimalVoterTest.php =====
+<?php
+// tests/Integration/Security/BaseAnimalVoterTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\Security;
+
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+
+abstract class BaseAnimalVoterTest extends BaseSecurityIntegrationTest
+{
+    protected function assertGranted(string $permission, mixed $subject): void
+    {
+        $auth = self::getContainer()->get(AuthorizationCheckerInterface::class);
+        self::assertTrue(
+            $auth->isGranted($permission, $subject),
+            sprintf('Expected permission "%s" to be GRANTED.', $permission)
+        );
+    }
+
+    protected function assertDenied(string $permission, mixed $subject): void
+    {
+        $auth = self::getContainer()->get(AuthorizationCheckerInterface::class);
+        self::assertFalse(
+            $auth->isGranted($permission, $subject),
+            sprintf('Expected permission "%s" to be DENIED.', $permission)
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/BaseAnimalVoterTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Security/BaseSecurityIntegrationTest.php =====
+<?php
+
+namespace App\Tests\Integration\Security;
+
+use App\Entity\User;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
+
+abstract class BaseSecurityIntegrationTest extends KernelTestCase
+{
+    protected EntityManagerInterface $em;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // NÃO bootar kernel manualmente
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    protected function authenticate(User $user): void
+    {
+        $tokenStorage = self::getContainer()->get(TokenStorageInterface::class);
+
+        $token = new UsernamePasswordToken(
+            $user,
+            'main', // firewall real
+            $user->getRoles()
+        );
+
+        $tokenStorage->setToken($token);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Security/BaseSecurityIntegrationTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Treatment/CancelTreatmentScheduleAgendaServiceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\Treatment;
+
+use App\Application\Treatment\Service\CancelTreatmentScheduleAgendaService;
+use App\Entity\Animal;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalTreatment;
+use App\Entity\AnimalTreatmentSchedule;
+use App\Entity\Person;
+use App\Enum\AnimalAgendaItemStatus;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class CancelTreatmentScheduleAgendaServiceTest extends KernelTestCase
+{
+    private EntityManagerInterface $em;
+    private CancelTreatmentScheduleAgendaService $service;
+
+    protected function setUp(): void
+    {
+        self::bootKernel();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->service = self::getContainer()->get(CancelTreatmentScheduleAgendaService::class);
+    }
+
+    public function testCancelOnlyFuturePlannedAgendaItems(): void
+    {
+        $tutor = new Person();
+        $tutor->setFullName('Tutor');
+        $this->em->persist($tutor);
+
+        $animal = new Animal();
+        $animal->assignTutor($tutor);
+
+        $agenda = new AnimalAgenda($animal);
+        $animal->setAgenda($agenda);
+
+        $this->em->persist($animal);
+        $this->em->persist($agenda);
+
+        $treatment = new AnimalTreatment(
+            animal: $animal,
+            name: 'Tratamento',
+            startsAt: new \DateTimeImmutable('-10 days')
+        );
+
+        $schedule = AnimalTreatmentSchedule::intervalDays(
+            treatment: $treatment,
+            startsAt: new \DateTimeImmutable('-10 days'),
+            endsAt: null,
+            intervalDays: 1,
+            preferredTime: '08:00',
+            dosage: '1 dose'
+        );
+
+        $this->em->persist($treatment);
+        $this->em->persist($schedule);
+
+        // item passado
+        $pastItem = new AnimalAgendaItem(
+            agenda: $agenda,
+            createdBy: $tutor,
+            type: 'TASK',
+            title: 'Passado',
+            startsAt: new \DateTimeImmutable('-5 days'),
+            status: AnimalAgendaItemStatus::DONE
+        );
+        $pastItem->setTreatmentSchedule($schedule);
+
+        // item futuro
+        $futureItem = new AnimalAgendaItem(
+            agenda: $agenda,
+            createdBy: $tutor,
+            type: 'TASK',
+            title: 'Futuro',
+            startsAt: new \DateTimeImmutable('+2 days'),
+            status: AnimalAgendaItemStatus::PLANNED
+        );
+        $futureItem->setTreatmentSchedule($schedule);
+
+        $this->em->persist($pastItem);
+        $this->em->persist($futureItem);
+        $this->em->flush();
+
+        $this->service->cancelFutureAgendaItems(
+            schedule: $schedule,
+            from: new \DateTimeImmutable(),
+            actor: $tutor
+        );
+
+        self::assertSame(
+            AnimalAgendaItemStatus::DONE,
+            $pastItem->getStatus()
+        );
+
+        self::assertSame(
+            AnimalAgendaItemStatus::CANCELED,
+            $futureItem->getStatus()
+        );
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Treatment/CancelTreatmentScheduleAgendaServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Treatment/GenerateTreatmentAgendaServiceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\Treatment;
+
+use App\Application\Treatment\Service\GenerateTreatmentAgendaService;
+use App\Entity\Animal;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalTreatment;
+use App\Entity\AnimalTreatmentSchedule;
+use App\Enum\TreatmentFrequencyType;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use App\Entity\Person;
+
+final class GenerateTreatmentAgendaServiceTest extends KernelTestCase
+{
+    private EntityManagerInterface $em;
+    private GenerateTreatmentAgendaService $service;
+
+    protected function setUp(): void
+    {
+        self::bootKernel();
+
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $this->service = new GenerateTreatmentAgendaService(
+            $this->em
+        );
+    }
+
+    public function testDailyTimesScheduleGeneratesAgendaItemsFromPast(): void
+    {
+        $tutor = new Person();
+        $tutor->setFullName('José');
+        $this->em->persist($tutor);
+
+        $animal = new Animal();
+        $animal->assignTutor($tutor);
+
+        $agenda = new AnimalAgenda($animal);
+        $animal->setAgenda($agenda);
+
+        $this->em->persist($animal);
+        $this->em->persist($agenda);
+
+        $treatment = new AnimalTreatment(
+            animal: $animal,
+            name: 'Antibiótico',
+            startsAt: new \DateTimeImmutable('2026-01-05')
+        );
+
+        $schedule = AnimalTreatmentSchedule::dailyTimes(
+            treatment: $treatment,
+            startsAt: new \DateTimeImmutable('2026-01-05'),
+            timesPerDay: 2,
+            times: ['08:00', '20:00'],
+            endsAt: null,
+            dosage: '1 comprimido'
+        );
+
+        $this->em->persist($treatment);
+        $this->em->persist($schedule);
+        $this->em->flush();
+
+        $from  = new \DateTimeImmutable('2026-01-05');
+        $until = new \DateTimeImmutable('2026-01-07');
+
+        $this->service->generate(
+            treatment: $treatment,
+            schedule: $schedule,
+            from: $from,
+            until: $until
+        );
+
+        $this->em->flush();
+        $this->em->clear();
+
+        $items = $this->em
+            ->getRepository(AnimalAgendaItem::class)
+            ->findBy(['agenda' => $agenda]);
+
+        // 3 dias x 2 horários
+        self::assertCount(6, $items);
+
+        foreach ($items as $item) {
+            self::assertSame('PLANNED', $item->getStatus());
+            self::assertSame('Antibiótico', $item->getTitle());
+            self::assertNotNull($item->getStartsAt());
+        }
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Treatment/GenerateTreatmentAgendaServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/Treatment/RegenerateTreatmentAgendaServiceTest.php =====
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\Treatment;
+
+use App\Application\Treatment\Service\RegenerateTreatmentAgendaService;
+use App\Entity\Animal;
+use App\Entity\AnimalAgenda;
+use App\Entity\AnimalAgendaItem;
+use App\Entity\AnimalTreatment;
+use App\Entity\AnimalTreatmentSchedule;
+use App\Entity\Person;
+use App\Enum\AnimalAgendaItemStatus;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class RegenerateTreatmentAgendaServiceTest extends KernelTestCase
+{
+    private EntityManagerInterface $em;
+    private RegenerateTreatmentAgendaService $service;
+
+    protected function setUp(): void
+    {
+        self::bootKernel();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->service = self::getContainer()->get(RegenerateTreatmentAgendaService::class);
+    }
+
+    public function testRegenerateCancelsFutureAndCreatesNewItems(): void
+    {
+        $tutor = new Person();
+        $tutor->setFullName('Tutor');
+        $this->em->persist($tutor);
+
+        $animal = new Animal();
+        $animal->assignTutor($tutor);
+
+        $agenda = new AnimalAgenda($animal);
+        $animal->setAgenda($agenda);
+
+        $this->em->persist($animal);
+        $this->em->persist($agenda);
+
+        $treatment = new AnimalTreatment(
+            animal: $animal,
+            name: 'Tratamento',
+            startsAt: new \DateTimeImmutable('-10 days')
+        );
+
+        $schedule = AnimalTreatmentSchedule::intervalDays(
+            treatment: $treatment,
+            startsAt: new \DateTimeImmutable('-10 days'),
+            endsAt: null,
+            intervalDays: 2,
+            preferredTime: '08:00',
+            dosage: '1 dose'
+        );
+
+        $this->em->persist($treatment);
+        $this->em->persist($schedule);
+
+        // item futuro antigo
+        $oldFutureItem = new AnimalAgendaItem(
+            agenda: $agenda,
+            createdBy: $tutor,
+            type: 'TASK',
+            title: 'Antigo',
+            startsAt: new \DateTimeImmutable('+2 days'),
+            status: AnimalAgendaItemStatus::PLANNED
+        );
+        $oldFutureItem->setTreatmentSchedule($schedule);
+
+        $this->em->persist($oldFutureItem);
+        $this->em->flush();
+
+        $this->service->regenerate(
+            schedule: $schedule,
+            from: new \DateTimeImmutable(),
+            actor: $tutor
+        );
+
+        $items = $this->em->getRepository(AnimalAgendaItem::class)
+            ->findBy(['treatmentSchedule' => $schedule]);
+
+        self::assertNotEmpty($items);
+
+        $statuses = array_map(
+            fn (AnimalAgendaItem $item) => $item->getStatus(),
+            $items
+        );
+
+        self::assertContains(AnimalAgendaItemStatus::CANCELED, $statuses);
+        self::assertContains(AnimalAgendaItemStatus::PLANNED, $statuses);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/Treatment/RegenerateTreatmentAgendaServiceTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/User/CreateTutorUserTest.php =====
+<?php
+// path: backend/tests/Integration/User/CreateTutorUserTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\User;
+
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\Response;
+
+final class CreateTutorUserTest extends WebTestCase
+{
+    public function testPublicTutorSignupCreatesUserAndPerson(): void
+    {
+        $client = static::createClient();
+
+        $client->request(
+            'POST',
+            '/api/public/tutors/signup',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'full_name' => 'Test Tutor',
+                'email' => 'tutor_' . uniqid('', true) . '@test.com',
+                'password' => 'secret123',
+            ])
+        );
+
+        self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
+
+        $data = json_decode($client->getResponse()->getContent(), true);
+
+        self::assertArrayHasKey('id', $data);
+        self::assertArrayHasKey('email', $data);
+        self::assertArrayHasKey('person_id', $data);
+
+        $em = self::getContainer()->get('doctrine')->getManager();
+
+        /** @var User|null $user */
+        $user = $em->getRepository(User::class)->find($data['id']);
+        self::assertNotNull($user);
+
+        self::assertSame('Test Tutor', $user->getPerson()->getFullName());
+        self::assertContains('ROLE_TUTOR', $user->getRoles());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/User/CreateTutorUserTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Integration/User/VerifyTutorEmailTest.php =====
+<?php
+// path: backend/tests/Integration/User/VerifyTutorEmailTest.php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\User;
+
+use App\Application\User\GenerateUserEmailVerificationService;
+use App\Entity\User;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+final class VerifyTutorEmailTest extends KernelTestCase
+{
+    public function testUserEmailVerificationFlow(): void
+    {
+        self::bootKernel();
+
+        $em = self::getContainer()->get('doctrine')->getManager();
+
+        $user = new User();
+        $user->setEmail('verify_' . uniqid('', true) . '@test.com');
+        $user->setPassword('test');
+        $user->setPerson((new \App\Entity\Person())->setFullName('Verify User'));
+
+        $em->persist($user);
+        $em->flush();
+
+        $generator = self::getContainer()
+            ->get(GenerateUserEmailVerificationService::class);
+
+        $token = $generator->generate($user)->getToken();
+
+        self::assertFalse($user->isVerified());
+
+        $confirmer = self::getContainer()
+            ->get(\App\Application\User\ConfirmUserEmailService::class);
+
+        $confirmer->confirm($token);
+
+        $em->refresh($user);
+
+        self::assertTrue($user->isVerified());
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Integration/User/VerifyTutorEmailTest.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Support/FakeAuditLogger.php =====
+<?php
+
+namespace App\Tests\Support;
+
+class FakeAuditLogger
+{
+    public array $events = [];
+/**
+ * @covers \App\Domain\AccessControl\OwnershipTransferService
+ */
+    public function logDecision(
+        mixed $actor = null,
+        string $action = '',
+        string $resourceType = '',
+        ?int $resourceId = null,
+        string $decision = 'allow',
+        mixed $contextOrg = null,
+        ?string $reason = null
+    ): void {
+        $this->events[] = [
+            'actor' => $actor,
+            'action' => $action,
+            'resourceType' => $resourceType,
+            'resourceId' => $resourceId,
+            'decision' => $decision,
+            'contextOrg' => $contextOrg,
+            'reason' => $reason,
+        ];
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Support/FakeAuditLogger.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Support/FakeDomainEventDispatcher.php =====
+<?php
+
+namespace App\Tests\Support;
+
+use App\Domain\AccessControl\DomainEventDispatcher;
+
+class FakeDomainEventDispatcher implements DomainEventDispatcher
+{
+    public array $dispatched = [];
+
+    public function dispatch(object $event): void
+    {
+        $this->dispatched[] = $event;
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Support/FakeDomainEventDispatcher.php =====
+
+===== BEGIN FILE: /var/www/app-plataforma/backend/tests/Support/SecurityTestHelper.php =====
+<?php
+
+namespace App\Tests\Support;
+
+use App\Entity\User;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+
+final class SecurityTestHelper
+{
+    public function __construct(
+        private TokenStorageInterface $tokenStorage
+    ) {}
+
+    public function login(User $user): void
+    {
+        // Mesma regra: sem verdade em roles do User no contexto de ACL do projeto.
+        $token = new UsernamePasswordToken(
+            user: $user,
+            firewallName: 'main',
+            roles: ['ROLE_USER']
+        );
+
+        $this->tokenStorage->setToken($token);
+    }
+
+    public function logout(): void
+    {
+        $this->tokenStorage->setToken(null);
+    }
+}
+
+
+===== END FILE: /var/www/app-plataforma/backend/tests/Support/SecurityTestHelper.php =====

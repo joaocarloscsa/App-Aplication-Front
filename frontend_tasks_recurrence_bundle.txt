@@ -1,0 +1,1558 @@
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/animalTasks.ts =====
+// path: frontend/src/services/animalTasks.ts
+
+import { apiFetch } from "./api";
+import type {
+  AnimalTaskItem,
+  TaskPriority,
+  TaskStatus,
+} from "@/types/agenda";
+
+/* =======================
+ * READ
+ * ======================= */
+
+export async function getAnimalTasks(
+  animalId: string,
+  params?: {
+    from?: string;
+    to?: string;
+    status?: TaskStatus | "ALL";
+  }
+): Promise<{ items: AnimalTaskItem[] }> {
+  const qs = new URLSearchParams(
+    Object.entries(params ?? {}).filter(
+      ([, v]) => v !== undefined
+    ) as [string, string][]
+  ).toString();
+
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks${qs ? `?${qs}` : ""}`
+  );
+}
+
+/* =======================
+ * CREATE
+ * ======================= */
+
+export async function createAnimalTask(
+  animalId: string,
+  payload: {
+    title: string;
+    scheduled_at: string;
+    priority?: TaskPriority;
+  }
+): Promise<{ id: number }> {
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/* =======================
+ * ACTIONS
+ * ======================= */
+
+export async function markTaskDone(
+  animalId: string,
+  taskId: number,
+  comment?: string
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/done`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+export async function reopenTask(
+  animalId: string,
+  taskId: number,
+  comment?: string
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/reopen`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+export async function cancelTask(
+  animalId: string,
+  taskId: number,
+  comment?: string
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/cancel`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment }),
+    }
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/services/animalTasks.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/services/animalAgenda.ts =====
+// path: src/services/animalAgenda.ts
+
+import { apiFetch } from "./api";
+
+export type AgendaView = "day" | "week" | "month" | "year";
+
+export type AgendaItem = {
+  id: number;
+  type: "task" | "event" | "appointment";
+  title: string;
+  status: string;
+  priority: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_by: {
+    person_public_id: string;
+    name: string;
+  };
+};
+
+export type AnimalAgendaResponse = {
+  animal_id: string;
+  view: AgendaView;
+  from: string;
+  to: string;
+  items: AgendaItem[];
+};
+
+export async function getAnimalAgenda(
+  animalId: string,
+  view: AgendaView,
+  ref: string
+): Promise<AnimalAgendaResponse> {
+  const qs = new URLSearchParams({ view, ref }).toString();
+
+  return apiFetch(
+    `/api/v1/animals/${animalId}/agenda?${qs}`
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/services/animalAgenda.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx =====
+// path: src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx
+
+"use client";
+
+export default function AnimalAgendaPage() {
+  return null;
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/page.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/tasks/page.tsx =====
+// path: frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/tasks/page.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
+import {
+  getAnimalTasks,
+  markTaskDone,
+  reopenTask,
+  cancelTask,
+  AnimalTaskItem,
+} from "@/services/animalTasks";
+
+import { TaskCreateForm } from "@/components/agenda/TaskCreateForm";
+import { AgendaTaskFilters } from "@/components/agenda/AgendaTaskFilters";
+
+/* =======================
+ * Tipos locais (UI)
+ * ======================= */
+
+type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
+
+/* =======================
+ * Visual
+ * ======================= */
+
+const typeStyle = {
+  task: {
+    label: "Tarefa",
+    dot: "bg-blue-500",
+  },
+};
+
+const priorityLabel: Record<number, string> = {
+  1: "Alta",
+  2: "Normal",
+  3: "Baixa",
+};
+
+function getTaskVisualState(task: AnimalTaskItem) {
+  if (task.status === "CANCELED") return "canceled";
+  if (task.status === "DONE") return "done";
+
+  if (task.scheduled_at) {
+    if (new Date(task.scheduled_at).getTime() < Date.now()) {
+      return "late";
+    }
+  }
+
+  return "planned";
+}
+
+const stateStyle: Record<string, string> = {
+  planned: "bg-white",
+  late: "bg-amber-50",
+  done: "bg-green-50",
+  canceled: "bg-zinc-100",
+};
+
+/* =======================
+ * Datas (regra única)
+ * ======================= */
+
+function resolveDateRange(
+  todayOnly: boolean,
+  year: number,
+  month: number,
+  from?: string,
+  to?: string
+) {
+  // 1️⃣ Intervalo manual (prioridade máxima)
+  if (from && to) {
+    return {
+      from: new Date(from + "T00:00:00").toISOString(),
+      to: new Date(to + "T23:59:59").toISOString(),
+    };
+  }
+
+  // 2️⃣ Hoje
+  if (todayOnly) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return {
+      from: start.toISOString(),
+      to: end.toISOString(),
+    };
+  }
+
+  // 3️⃣ Mês + ano (default)
+  return {
+    from: new Date(year, month - 1, 1, 0, 0, 0).toISOString(),
+    to: new Date(year, month, 0, 23, 59, 59).toISOString(),
+  };
+}
+
+/* =======================
+ * Page
+ * ======================= */
+
+export default function AnimalAgendaTasksPage() {
+  const { animalId } = useParams<{ animalId: string }>();
+  const now = new Date();
+
+  const [tasks, setTasks] = useState<AnimalTaskItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // filtros
+  const [todayOnly, setTodayOnly] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
+
+  const [statusFilter, setStatusFilter] =
+    useState<TaskStatusFilter>("PLANNED");
+
+  async function load() {
+    if (!animalId) return;
+
+    const range = resolveDateRange(
+      todayOnly,
+      year,
+      month,
+      from,
+      to
+    );
+
+    const backendStatus =
+      statusFilter === "LATE" ? "PLANNED" : statusFilter;
+
+    const res = await getAnimalTasks(animalId, {
+      ...range,
+      status: backendStatus === "ALL" ? undefined : backendStatus,
+    });
+
+    const items =
+      statusFilter === "LATE"
+        ? res.items.filter(
+            (t) =>
+              t.status === "PLANNED" &&
+              t.scheduled_at &&
+              new Date(t.scheduled_at) < new Date()
+          )
+        : res.items;
+
+    setTasks(items);
+  }
+
+  function updateTaskStatus(
+    taskId: number,
+    status: "DONE" | "PLANNED" | "CANCELED"
+  ) {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status } : t
+      )
+    );
+  }
+
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+  }, [animalId, todayOnly, year, month, from, to, statusFilter]);
+
+  if (loading) {
+    return <p className="text-sm text-zinc-500">Carregando tarefas…</p>;
+  }
+
+  return (
+    <section className="space-y-6">
+      <TaskCreateForm animalId={animalId} onCreated={load} />
+
+      <AgendaTaskFilters
+        todayOnly={todayOnly}
+        expanded={expanded}
+        year={year}
+        month={month}
+        from={from}
+        to={to}
+        status={statusFilter}
+        onToggleToday={setTodayOnly}
+        onToggleExpanded={() => setExpanded((v) => !v)}
+        onChangeYear={setYear}
+        onChangeMonth={setMonth}
+        onChangeFrom={setFrom}
+        onChangeTo={setTo}
+        onChangeStatus={setStatusFilter}
+      />
+
+      <ul className="space-y-3">
+        {tasks.map((task) => {
+          const expandedItem = expandedId === task.id;
+          const visualState = getTaskVisualState(task);
+          const type = typeStyle.task;
+
+          return (
+            <li
+              key={task.id}
+              onClick={() =>
+                setExpandedId(expandedItem ? null : task.id)
+              }
+              className={`rounded-md border px-4 py-3 space-y-2 cursor-pointer ${stateStyle[visualState]}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={`w-2 h-2 rounded-full ${type.dot}`} />
+                  <span className="font-medium text-zinc-700">
+                    {type.label}
+                  </span>
+                  <span className="text-zinc-500">
+                    • Prioridade: {priorityLabel[task.priority] ?? "Normal"}
+                  </span>
+                </div>
+
+                <span className="text-xs font-medium text-zinc-600">
+                  {visualState === "late" ? "Atrasada" : task.status}
+                </span>
+              </div>
+
+              <p className="font-medium text-zinc-900">
+                {task.title}
+              </p>
+
+              <p className="text-xs text-zinc-500">
+                {task.scheduled_at
+                  ? new Date(task.scheduled_at).toLocaleString()
+                  : "Sem data"}
+              </p>
+
+              {expandedItem && (
+                <div className="border-t pt-3 text-xs text-zinc-600 space-y-1">
+                  <p>
+                    <strong>Criada em:</strong>{" "}
+                    {new Date(task.created_at).toLocaleString()}
+                  </p>
+                  <p>
+                    <strong>Criada por:</strong>{" "}
+                    {task.created_by.name}
+                  </p>
+                </div>
+              )}
+
+              <div
+                className="flex gap-3 text-xs"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {task.status !== "DONE" && (
+                  <button
+                    onClick={async () => {
+                      updateTaskStatus(task.id, "DONE");
+                      await markTaskDone(animalId, task.id);
+                    }}
+                    className="text-green-700 hover:underline"
+                  >
+                    ✔ Feita
+                  </button>
+                )}
+
+                {task.status === "DONE" && (
+                  <button
+                    onClick={async () => {
+                      updateTaskStatus(task.id, "PLANNED");
+                      await reopenTask(animalId, task.id);
+                    }}
+                    className="text-amber-700 hover:underline"
+                  >
+                    ↺ Reabrir
+                  </button>
+                )}
+
+                <button
+                  onClick={async () => {
+                    const ok = confirm("Cancelar esta tarefa?");
+                    if (!ok) return;
+                    updateTaskStatus(task.id, "CANCELED");
+                    await cancelTask(animalId, task.id);
+                  }}
+                  className="text-red-700 hover:underline"
+                >
+                  ✖ Cancelar
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/agenda/tasks/page.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaItemCard.tsx =====
+// path: frontend/src/components/agenda/AgendaItemCard.tsx
+
+"use client";
+
+import type { AgendaItem } from "@/services/animalAgenda";
+
+function priorityLabel(p: number | null) {
+  if (p === null) return null;
+  if (p >= 8) return "Alta";
+  if (p >= 4) return "Média";
+  return "Baixa";
+}
+
+function priorityClasses(p: number | null) {
+  if (p === null) return "bg-zinc-100 text-zinc-700";
+  if (p >= 8) return "bg-red-100 text-red-800";
+  if (p >= 4) return "bg-amber-100 text-amber-800";
+  return "bg-green-100 text-green-800";
+}
+
+export function AgendaItemCard({ item }: { item: AgendaItem }) {
+  return (
+    <li className="rounded-md border bg-white px-4 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-zinc-900 truncate">{item.title}</p>
+
+          {item.description && (
+            <p className="text-xs text-zinc-600">{item.description}</p>
+          )}
+
+          <p className="text-xs text-zinc-500">
+            {item.starts_at
+              ? new Date(item.starts_at).toLocaleString()
+              : "Sem data"}
+            {item.ends_at && (
+              <>
+                {" "}
+                → {new Date(item.ends_at).toLocaleString()}
+              </>
+            )}
+          </p>
+        </div>
+
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="text-xs rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700">
+            {item.type}
+          </span>
+
+          {item.priority !== null && (
+            <span
+              className={[
+                "text-xs rounded-full px-2 py-0.5 font-medium",
+                priorityClasses(item.priority),
+              ].join(" ")}
+            >
+              Prioridade {priorityLabel(item.priority)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {item.status && (
+        <div className="text-xs text-zinc-600">
+          Estado: <span className="font-medium">{item.status}</span>
+        </div>
+      )}
+    </li>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaItemCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaItemCreateForm.tsx =====
+// path: frontend/src/components/agenda/AgendaItemCreateForm.tsx
+
+"use client";
+
+import { useState } from "react";
+
+export type RecurrenceUnit = "day" | "week" | "month" | "year";
+
+export type RecurrenceRule = {
+  interval: number;        // ex: 1, 2, 3
+  unit: RecurrenceUnit;    // day | week | month | year
+  until?: string | null;   // ISO date
+};
+
+type Props = {
+  onSubmit(data: {
+    title: string;
+    description: string | null;
+    starts_at: string;
+    ends_at: string | null;
+    priority: number | null;
+    recurrence: RecurrenceRule | null;
+  }): Promise<void>;
+};
+
+export function AgendaItemCreateForm({ onSubmit }: Props) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [priority, setPriority] = useState<number | null>(null);
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [interval, setInterval] = useState(1);
+  const [unit, setUnit] = useState<RecurrenceUnit>("day");
+  const [until, setUntil] = useState("");
+
+  async function handleSubmit() {
+    if (!title || !startsAt) return;
+
+    await onSubmit({
+      title,
+      description: description || null,
+      starts_at: startsAt,
+      ends_at: endsAt || null,
+      priority,
+      recurrence: isRecurring
+        ? {
+            interval,
+            unit,
+            until: until || null,
+          }
+        : null,
+    });
+
+    setTitle("");
+    setDescription("");
+    setStartsAt("");
+    setEndsAt("");
+    setPriority(null);
+    setIsRecurring(false);
+  }
+
+  return (
+    <div className="space-y-4 rounded-md border bg-white p-4">
+      <h3 className="text-sm font-semibold text-zinc-900">
+        Nova tarefa / evento
+      </h3>
+
+      <input
+        className="w-full rounded-md border px-3 py-2 text-sm"
+        placeholder="Título"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+
+      <textarea
+        className="w-full rounded-md border px-3 py-2 text-sm"
+        placeholder="Observações"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="datetime-local"
+          className="rounded-md border px-3 py-2 text-sm"
+          value={startsAt}
+          onChange={(e) => setStartsAt(e.target.value)}
+        />
+
+        <input
+          type="datetime-local"
+          className="rounded-md border px-3 py-2 text-sm"
+          value={endsAt}
+          onChange={(e) => setEndsAt(e.target.value)}
+        />
+      </div>
+
+      <select
+        className="w-full rounded-md border px-3 py-2 text-sm"
+        value={priority ?? ""}
+        onChange={(e) =>
+          setPriority(e.target.value ? Number(e.target.value) : null)
+        }
+      >
+        <option value="">Sem prioridade</option>
+        <option value="3">Baixa</option>
+        <option value="5">Média</option>
+        <option value="9">Alta</option>
+      </select>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isRecurring}
+          onChange={(e) => setIsRecurring(e.target.checked)}
+        />
+        Tarefa recorrente
+      </label>
+
+      {isRecurring && (
+        <div className="grid grid-cols-3 gap-2">
+          <input
+            type="number"
+            min={1}
+            className="rounded-md border px-2 py-1 text-sm"
+            value={interval}
+            onChange={(e) => setInterval(Number(e.target.value))}
+          />
+
+          <select
+            className="rounded-md border px-2 py-1 text-sm"
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as RecurrenceUnit)}
+          >
+            <option value="day">Dia(s)</option>
+            <option value="week">Semana(s)</option>
+            <option value="month">Mês(es)</option>
+            <option value="year">Ano(s)</option>
+          </select>
+
+          <input
+            type="date"
+            className="rounded-md border px-2 py-1 text-sm"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+          />
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white"
+      >
+        Criar
+      </button>
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaItemCreateForm.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaTaskFilters.tsx =====
+"use client";
+
+type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
+
+type Props = {
+  todayOnly: boolean;
+  expanded: boolean;
+
+  year: number;
+  month: number;
+
+  from?: string;
+  to?: string;
+
+  status: TaskStatusFilter;
+
+  onToggleToday(value: boolean): void;
+  onToggleExpanded(): void;
+
+  onChangeYear(year: number): void;
+  onChangeMonth(month: number): void;
+
+  onChangeFrom(value: string): void;
+  onChangeTo(value: string): void;
+
+  onChangeStatus(status: TaskStatusFilter): void;
+};
+
+const months = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+export function AgendaTaskFilters({
+  todayOnly,
+  expanded,
+  year,
+  month,
+  from,
+  to,
+  status,
+  onToggleToday,
+  onToggleExpanded,
+  onChangeYear,
+  onChangeMonth,
+  onChangeFrom,
+  onChangeTo,
+  onChangeStatus,
+}: Props) {
+  const currentYear = new Date().getFullYear();
+
+  return (
+    <div className="space-y-3 border rounded-md p-3 bg-zinc-50">
+      {/* Linha principal */}
+      <div className="flex flex-wrap gap-4 items-end">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={todayOnly}
+            onChange={(e) => onToggleToday(e.target.checked)}
+          />
+          Hoje
+        </label>
+
+        {!todayOnly && (
+          <>
+            <select
+              value={month}
+              onChange={(e) => onChangeMonth(Number(e.target.value))}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              {months.map((label, i) => (
+                <option key={i} value={i + 1}>{label}</option>
+              ))}
+            </select>
+
+            <select
+              value={year}
+              onChange={(e) => onChangeYear(Number(e.target.value))}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              {Array.from({ length: 10 }).map((_, i) => {
+                const y = currentYear - 5 + i;
+                return <option key={y} value={y}>{y}</option>;
+              })}
+            </select>
+          </>
+        )}
+
+        <select
+          value={status}
+          onChange={(e) =>
+            onChangeStatus(e.target.value as TaskStatusFilter)
+          }
+          className="border rounded px-2 py-1 text-sm"
+        >
+          <option value="PLANNED">A fazer</option>
+          <option value="DONE">Concluídas</option>
+          <option value="LATE">Atrasadas</option>
+          <option value="ALL">Todas</option>
+        </select>
+
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="text-xs text-blue-700 underline"
+        >
+          Filtro avançado
+        </button>
+      </div>
+
+      {/* Avançado */}
+      {expanded && (
+        <div className="flex gap-3 text-sm">
+          <input
+            type="date"
+            value={from ?? ""}
+            onChange={(e) => onChangeFrom(e.target.value)}
+            className="border rounded px-2 py-1"
+          />
+          <input
+            type="date"
+            value={to ?? ""}
+            onChange={(e) => onChangeTo(e.target.value)}
+            className="border rounded px-2 py-1"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaTaskFilters.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaViewSwitcher.tsx =====
+// path: frontend/src/components/agenda/AgendaViewSwitcher.tsx
+
+"use client";
+
+export type AgendaView = "day" | "week" | "month" | "year";
+
+type Props = {
+  value: AgendaView;
+  onChange: (v: AgendaView) => void;
+};
+
+export function AgendaViewSwitcher({ value, onChange }: Props) {
+  const options: { key: AgendaView; label: string }[] = [
+    { key: "day", label: "Dia" },
+    { key: "week", label: "Semana" },
+    { key: "month", label: "Mês" },
+    { key: "year", label: "Ano" },
+  ];
+
+  return (
+    <div className="flex gap-2">
+      {options.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          className={[
+            "px-3 py-1.5 rounded-md text-sm transition-colors",
+            value === opt.key
+              ? "bg-zinc-900 text-white"
+              : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200",
+          ].join(" ")}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/AgendaViewSwitcher.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx =====
+// path: frontend/src/components/agenda/TaskCard.tsx
+
+"use client";
+
+import type { AnimalTaskItem } from "@/services/animalTasks";
+import {
+  isDueSoon,
+  statusBadgeClasses,
+  statusLabel,
+  TaskStatus,
+} from "@/utils/task-actions";
+
+type Props = {
+  task: AnimalTaskItem;
+  onAction(
+    action: "done" | "reopen" | "cancel",
+    comment: string | null
+  ): Promise<void>;
+};
+
+function askComment(label: string): string | null {
+  const v = prompt(label);
+  if (v === null) return null;
+  const trimmed = v.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function TaskCard({ task, onAction }: Props) {
+  const status = task.status as TaskStatus;
+  const dueSoon = isDueSoon(task, 12);
+
+  const canMarkDone = status === "PLANNED";
+  const canReopen = status === "DONE";
+  const canCancel = status === "PLANNED";
+
+  function priorityLabel(p: number) {
+  if (p === 3) return "Alta";
+  if (p === 1) return "Baixa";
+  return "Normal";
+}
+
+function priorityBadgeClasses(p: number) {
+  if (p === 3) return "bg-red-100 text-red-800";
+  if (p === 1) return "bg-zinc-100 text-zinc-600";
+  return "bg-blue-100 text-blue-800";
+}
+
+
+  return (
+    <li className="rounded-md border bg-white px-4 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-zinc-900 truncate">
+              {task.title}
+            </p>
+
+            <span
+              className={[
+                "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                statusBadgeClasses(status),
+              ].join(" ")}
+            >
+              {statusLabel(status)}
+            </span>
+
+            {dueSoon && (
+              <span className="inline-flex items-center rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium">
+                alerta (≤ 12h)
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-zinc-500">
+            {task.scheduled_at
+              ? new Date(task.scheduled_at).toLocaleString()
+              : "Sem data"}
+          </p>
+
+          <p className="text-xs text-zinc-600">
+            Criado por{" "}
+            <span className="font-medium">
+              {task.created_by.name}
+            </span>
+          </p>
+
+          {task.last_action && (
+            <p className="text-xs text-zinc-500">
+              Última ação:{" "}
+              <span className="font-medium">
+                {task.last_action.type}
+              </span>{" "}
+              por{" "}
+              <span className="font-medium">
+                {task.last_action.by.name}
+              </span>
+              {task.last_action.comment ? (
+                <span className="text-zinc-700">
+                  {" "}
+                  — {task.last_action.comment}
+                </span>
+              ) : null}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={!canMarkDone}
+            onClick={async () => {
+              const comment = askComment(
+                "Comentário (opcional) para marcar como feita:"
+              );
+              if (comment === null) return;
+              await onAction("done", comment);
+            }}
+            className={[
+              "text-xs rounded-md px-3 py-1.5 border transition-colors",
+              canMarkDone
+                ? "border-green-200 text-green-700 hover:bg-green-50"
+                : "border-zinc-200 text-zinc-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            Feita
+          </button>
+
+          <button
+            type="button"
+            disabled={!canReopen}
+            onClick={async () => {
+              const comment = askComment(
+                "Comentário (opcional) para reabrir:"
+              );
+              if (comment === null) return;
+              await onAction("reopen", comment);
+            }}
+            className={[
+              "text-xs rounded-md px-3 py-1.5 border transition-colors",
+              canReopen
+                ? "border-amber-200 text-amber-800 hover:bg-amber-50"
+                : "border-zinc-200 text-zinc-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            Reabrir
+          </button>
+
+          <button
+            type="button"
+            disabled={!canCancel}
+            onClick={async () => {
+              const ok = confirm("Cancelar esta tarefa?");
+              if (!ok) return;
+              const comment = askComment(
+                "Motivo/observação (opcional) do cancelamento:"
+              );
+              if (comment === null) return;
+              await onAction("cancel", comment);
+            }}
+            className={[
+              "text-xs rounded-md px-3 py-1.5 border transition-colors",
+              canCancel
+                ? "border-red-200 text-red-700 hover:bg-red-50"
+                : "border-zinc-200 text-zinc-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/agenda/TaskCreateForm.tsx =====
+// path: frontend/src/components/agenda/TaskCreateForm.tsx
+
+"use client";
+
+import { useState } from "react";
+import { createAnimalTask } from "@/services/animalTasks";
+
+type Props = {
+  animalId: string;
+  onCreated(): void;
+};
+
+type RecurrenceUnit = "day" | "week" | "month";
+
+export function TaskCreateForm({ animalId, onCreated }: Props) {
+  const [open, setOpen] = useState(false);
+
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [priority, setPriority] = useState<1 | 2 | 3>(2);
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [interval, setInterval] = useState(1);
+  const [unit, setUnit] = useState<RecurrenceUnit>("day");
+  const [until, setUntil] = useState("");
+
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    setError(null);
+
+    if (!title.trim()) {
+      setError("Título é obrigatório.");
+      return;
+    }
+
+    if (!date) {
+      setError("Data é obrigatória.");
+      return;
+    }
+
+    const scheduledAt = time
+      ? `${date}T${time}`
+      : `${date}T00:00`;
+
+    try {
+      setLoading(true);
+
+      await createAnimalTask(animalId, {
+        title,
+        scheduled_at: scheduledAt,
+        priority,
+        recurrence: isRecurring
+          ? {
+              interval,
+              unit,
+              until: until || null,
+            }
+          : null,
+      });
+
+      setTitle("");
+      setDate("");
+      setTime("");
+      setPriority(2);
+      setIsRecurring(false);
+      setInterval(1);
+      setUnit("day");
+      setUntil("");
+      setOpen(false);
+
+      onCreated();
+    } catch {
+      setError("Erro ao criar tarefa.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full rounded-md border border-dashed px-4 py-3 text-sm text-zinc-600 hover:bg-zinc-50"
+      >
+        ➕ Nova tarefa
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-md border bg-white p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-zinc-900">
+          Nova tarefa
+        </h3>
+
+        <button
+          onClick={() => setOpen(false)}
+          className="text-xs text-zinc-500 hover:underline"
+        >
+          Cancelar
+        </button>
+      </div>
+
+      <input
+        type="text"
+        placeholder="Título da tarefa"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full rounded-md border px-3 py-2 text-sm"
+      />
+
+      <div className="flex gap-2">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-md border px-3 py-2 text-sm"
+        />
+
+        <input
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          className="rounded-md border px-3 py-2 text-sm"
+        />
+      </div>
+
+      <select
+        value={priority}
+        onChange={(e) => setPriority(Number(e.target.value) as 1 | 2 | 3)}
+        className="rounded-md border px-3 py-2 text-sm"
+      >
+        <option value={1}>Alta</option>
+        <option value={2}>Normal</option>
+        <option value={3}>Baixa</option>
+      </select>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isRecurring}
+          onChange={(e) => setIsRecurring(e.target.checked)}
+        />
+        Tarefa recorrente
+      </label>
+
+      {isRecurring && (
+        <div className="grid grid-cols-3 gap-2">
+          <input
+            type="number"
+            min={1}
+            value={interval}
+            onChange={(e) => setInterval(Number(e.target.value))}
+            className="rounded-md border px-2 py-1 text-sm"
+          />
+
+          <select
+            value={unit}
+            onChange={(e) =>
+              setUnit(e.target.value as RecurrenceUnit)
+            }
+            className="rounded-md border px-2 py-1 text-sm"
+          >
+            <option value="day">Dia(s)</option>
+            <option value="week">Semana(s)</option>
+            <option value="month">Mês(es)</option>
+          </select>
+
+          <input
+            type="date"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+            className="rounded-md border px-2 py-1 text-sm"
+          />
+        </div>
+      )}
+
+      {error && (
+        <p className="text-xs text-red-600">{error}</p>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => setOpen(false)}
+          className="text-sm text-zinc-600 hover:underline"
+        >
+          Cancelar
+        </button>
+
+        <button
+          onClick={submit}
+          disabled={loading}
+          className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+        >
+          Criar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/agenda/TaskCreateForm.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/components/tasks/TasksAlertSummary.tsx =====
+// path: /var/www/GSA/animal/frontend/src/components/tasks/TasksAlertSummary.tsx
+
+"use client";
+
+import { summarizeAlerts } from "@/utils/tasks-alerts";
+
+type TaskLike = {
+  id: number;
+  title: string;
+  scheduled_at: string | null;
+  status: string;
+};
+
+type Props = {
+  tasks: TaskLike[];
+  onClick?: () => void;
+};
+
+export function TasksAlertSummary({ tasks, onClick }: Props) {
+  const alerts = summarizeAlerts(tasks);
+
+  if (alerts.overdue === 0 && alerts.today === 0 && alerts.tomorrow === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      onClick={onClick}
+      className="cursor-pointer rounded-lg border bg-white px-4 py-3 space-y-1 hover:bg-zinc-50"
+    >
+      <h3 className="text-sm font-semibold text-zinc-900">Tarefas pendentes</h3>
+
+      {alerts.overdue > 0 && (
+        <div className="text-sm text-red-700">⚠️ {alerts.overdue} atrasada(s)</div>
+      )}
+
+      {alerts.today > 0 && (
+        <div className="text-sm text-yellow-700">🕒 {alerts.today} para hoje</div>
+      )}
+
+      {alerts.tomorrow > 0 && (
+        <div className="text-sm text-blue-700">📅 {alerts.tomorrow} para amanhã</div>
+      )}
+    </div>
+  );
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/components/tasks/TasksAlertSummary.tsx =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/utils/tasks-time-filter.ts =====
+// path: /var/www/GSA/animal/frontend/src/utils/tasks-time-filter.ts
+
+import type { AnimalTaskItem } from "@/services/animalTasks";
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+}
+
+export function filterTasksByView(
+  tasks: AnimalTaskItem[],
+  view: "day" | "week" | "month",
+  reference: Date
+) {
+  const ref = new Date(reference);
+
+  let from: Date;
+  let to: Date;
+
+  if (view === "day") {
+    from = startOfDay(ref);
+    to = endOfDay(ref);
+  } else if (view === "week") {
+    const day = ref.getDay(); // 0..6 (domingo..sábado)
+    const start = new Date(ref);
+    start.setDate(ref.getDate() - day);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    from = startOfDay(start);
+    to = endOfDay(end);
+  } else {
+    from = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    to = endOfDay(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+  }
+
+return tasks
+  .filter((t) => {
+    if (!t.scheduled_at) return false;
+    const d = new Date(t.scheduled_at);
+    return d >= from && d <= to;
+  })
+  .sort((a, b) => {
+    const da = new Date(a.scheduled_at!).getTime();
+    const db = new Date(b.scheduled_at!).getTime();
+    if (da !== db) return da - db;
+
+    return b.priority - a.priority;
+  });
+
+}
+
+export function formatPeriodLabel(
+  view: "day" | "week" | "month",
+  reference: Date
+): string {
+  const ref = new Date(reference);
+
+  if (view === "day") {
+    return ref.toLocaleDateString();
+  }
+
+  if (view === "week") {
+    const day = ref.getDay();
+    const start = new Date(ref);
+    start.setDate(ref.getDate() - day);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    return `${start.toLocaleDateString()} — ${end.toLocaleDateString()}`;
+  }
+
+  return ref.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/utils/tasks-time-filter.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/utils/task-actions.ts =====
+// path: frontend/src/utils/task-actions.ts
+
+import type { AnimalTaskItem } from "@/services/animalTasks";
+
+export type TaskStatus = "PLANNED" | "DONE" | "CANCELED";
+
+export function statusLabel(status: TaskStatus): string {
+  switch (status) {
+    case "PLANNED":
+      return "Pendente";
+    case "DONE":
+      return "Feita";
+    case "CANCELED":
+      return "Cancelada";
+    default:
+      return status;
+  }
+}
+
+export function statusBadgeClasses(status: TaskStatus): string {
+  switch (status) {
+    case "PLANNED":
+      return "bg-amber-100 text-amber-800";
+    case "DONE":
+      return "bg-green-100 text-green-800";
+    case "CANCELED":
+      return "bg-zinc-100 text-zinc-700";
+    default:
+      return "bg-zinc-100 text-zinc-700";
+  }
+}
+
+export function isDueSoon(
+  task: Pick<AnimalTaskItem, "scheduled_at" | "status">,
+  hours = 12
+): boolean {
+  if (task.status !== "PLANNED") return false;
+  if (!task.scheduled_at) return false;
+
+  const now = Date.now();
+  const due = new Date(task.scheduled_at).getTime();
+  const diffMs = due - now;
+
+  if (diffMs < 0) return false;
+
+  return diffMs <= hours * 60 * 60 * 1000;
+}
+
+===== END FILE: /var/www/GSA/animal/frontend/src/utils/task-actions.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/utils/agenda-date-ranges.ts =====
+// path: frontend/src/utils/agenda-date-ranges.ts
+
+export function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+export function endOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+export function dayRange(d: Date) {
+  return {
+    from: startOfDay(d),
+    to: endOfDay(d),
+  };
+}
+
+export function weekRange(d: Date) {
+  const day = d.getDay() || 7; // domingo = 7
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - day + 1);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  return {
+    from: startOfDay(monday),
+    to: endOfDay(sunday),
+  };
+}
+
+export function monthRange(d: Date) {
+  const from = new Date(d.getFullYear(), d.getMonth(), 1);
+  const to = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+  return {
+    from: startOfDay(from),
+    to: endOfDay(to),
+  };
+}
+
+export function yearRange(d: Date) {
+  const from = new Date(d.getFullYear(), 0, 1);
+  const to = new Date(d.getFullYear(), 11, 31);
+
+  return {
+    from: startOfDay(from),
+    to: endOfDay(to),
+  };
+}
+
+export function rangeByView(
+  view: "day" | "week" | "month" | "year",
+  reference: Date
+) {
+  switch (view) {
+    case "day":
+      return dayRange(reference);
+    case "week":
+      return weekRange(reference);
+    case "month":
+      return monthRange(reference);
+    case "year":
+      return yearRange(reference);
+  }
+}
+
+
+===== END FILE: /var/www/GSA/animal/frontend/src/utils/agenda-date-ranges.ts =====
+
+===== BEGIN FILE: /var/www/GSA/animal/frontend/src/types/agenda.ts =====
+export type RecurrenceUnit =
+  | "day"
+  | "week"
+  | "month"
+  | "year";
+
+export type RecurrenceRule = {
+  interval: number;
+  unit: RecurrenceUnit;
+  until: string | null;
+};
+
+export type AnimalTaskItem = {
+  id: number;
+  type: "task";
+  title: string;
+  description: string | null;
+  status: "PLANNED" | "DONE" | "CANCELED";
+  priority: 1 | 2 | 3;
+  scheduled_at: string | null;
+  created_at: string;
+  created_by: {
+    person_public_id: string;
+    name: string;
+  };
+  recurrence: RecurrenceRule | null;
+};
+
+===== END FILE: /var/www/GSA/animal/frontend/src/types/agenda.ts =====
