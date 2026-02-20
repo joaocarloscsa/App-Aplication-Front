@@ -1,32 +1,27 @@
-// path: src/services/treatmentSchedules.ts
+// path: frontend/src/services/treatmentSchedules.ts
 
-import { http } from "@/services/http";
+import { apiFetch } from "@/services/api";
 
 export type CreateTreatmentSchedulePayload = {
-  frequency: string;
-  times_per_day?: number | null;
-  times?: string[] | null;
-  interval_days?: number | null;
-  preferred_time?: string | null;
-  dosage?: string | null;
-  starts_at: string;
-  ends_at?: string | null;
-  generate_agenda?: boolean;
-};
+  frequency_type: "interval_days";
 
-export type CreateTreatmentScheduleResponse = {
-  schedule_public_id: string;
+  starts_at: string; // ISO datetime
+  ends_at?: string | null; // ISO datetime | null
+
+  interval_days: number;
+  preferred_time?: string | null; // "HH:mm"
+
+  dosage?: string | null;
+  generate_agenda?: boolean;
 };
 
 export async function createTreatmentSchedule(
   treatmentPublicId: string,
   payload: CreateTreatmentSchedulePayload
-): Promise<CreateTreatmentScheduleResponse> {
-  return http<CreateTreatmentScheduleResponse>(
-    `/api/v1/treatments/${treatmentPublicId}/schedules`,
-    {
-      method: "POST",
-      body: payload,
-    }
-  );
+): Promise<{ status: "created"; schedule_id: number }> {
+  return apiFetch(`/api/v1/treatments/${treatmentPublicId}/schedules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }

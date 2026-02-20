@@ -1,14 +1,12 @@
-// path: src/app/(protected)/dashboard/animals/[animalId]/clinic/treatments/page.tsx
+// path: frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/treatments/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AnimalTreatmentScheduleCreateForm } from "@/components/animals/clinic/AnimalTreatmentScheduleCreateForm";
 import { AnimalTreatmentCreateForm } from "@/components/animals/clinic/AnimalTreatmentCreateForm";
-import {
-  fetchAnimalTreatments,
-  TreatmentDTO,
-} from "@/services/animalTreatments";
+import { fetchAnimalTreatments, TreatmentDTO } from "@/services/animalTreatments";
 
 function humanizeStatus(status: string) {
   const s = (status || "").toLowerCase();
@@ -19,13 +17,6 @@ function humanizeStatus(status: string) {
   return status;
 }
 
-function humanizeRole(role?: string) {
-  if (!role) return "";
-  if (role === "medico_veterinario") return "Médico veterinário";
-  if (role === "tutor") return "Tutor";
-  return role;
-}
-
 export default function AnimalClinicTreatmentsPage() {
   const { animalId } = useParams<{ animalId: string }>();
 
@@ -33,7 +24,6 @@ export default function AnimalClinicTreatmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   async function reload() {
     if (!animalId) return;
@@ -41,18 +31,15 @@ export default function AnimalClinicTreatmentsPage() {
     const treatments = await fetchAnimalTreatments(animalId);
 
     setItems(
-      treatments.filter(
-        (t): t is TreatmentDTO =>
-          Boolean(t && t.treatment_public_id)
-      )
+      treatments
+        .filter((t): t is TreatmentDTO => Boolean(t && t.treatment_public_id))
+        .sort((a, b) => {
+          // ✅ mais novos primeiro (created_at DESC)
+          const da = new Date(a.created_at).getTime();
+          const db = new Date(b.created_at).getTime();
+          return db - da;
+        })
     );
-  }
-
-  function toggle(treatmentPublicId: string) {
-    setExpanded((prev) => ({
-      ...prev,
-      [treatmentPublicId]: !prev[treatmentPublicId],
-    }));
   }
 
   useEffect(() => {
@@ -72,11 +59,8 @@ export default function AnimalClinicTreatmentsPage() {
 
   return (
     <div className="space-y-4">
-      {/* TOPO */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-900">
-          Tratamentos
-        </h2>
+        <h2 className="text-sm font-semibold text-zinc-900">Tratamentos</h2>
 
         <button
           type="button"
@@ -87,7 +71,6 @@ export default function AnimalClinicTreatmentsPage() {
         </button>
       </div>
 
-      {/* FORMULÁRIO */}
       {showCreateForm && (
         <AnimalTreatmentCreateForm
           animalPublicId={animalId}
@@ -108,15 +91,11 @@ export default function AnimalClinicTreatmentsPage() {
       {items.map((t) => (
         <div
           key={t.treatment_public_id}
-          onClick={() => toggle(t.treatment_public_id)}
-          className="rounded-lg border bg-white px-4 py-3 space-y-3 cursor-pointer"
+          className="rounded-lg border bg-white px-4 py-3 space-y-3"
         >
-          {/* RESUMO */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-medium text-zinc-900 truncate">
-                {t.name}
-              </p>
+              <p className="font-medium text-zinc-900 truncate">{t.name}</p>
               <p className="text-xs text-zinc-500 font-mono">
                 {t.treatment_public_id}
               </p>
@@ -129,53 +108,22 @@ export default function AnimalClinicTreatmentsPage() {
 
           <p className="text-xs text-zinc-500">
             Início: {new Date(t.starts_at).toLocaleString()}
-            {t.ends_at
-              ? ` • Fim: ${new Date(t.ends_at).toLocaleString()}`
-              : ""}
+            {t.ends_at ? ` • Fim: ${new Date(t.ends_at).toLocaleString()}` : ""}
           </p>
 
-          {/* EXPANDIDO */}
-          {expanded[t.treatment_public_id] && (
-            <div className="mt-3 pt-3 border-t space-y-3">
-              {t.notes && (
-                <div>
-                  <p className="text-xs font-medium text-zinc-700">
-                    Observação inicial
-                  </p>
-                  <p className="text-sm text-zinc-800 whitespace-pre-line">
-                    {t.notes}
-                  </p>
-                </div>
-              )}
-
-              <div className="text-xs text-zinc-500 space-y-1">
-                {t.created_by?.name && (
-                  <p>Criado por {t.created_by.name}</p>
-                )}
-                {t.actor?.role_at_creation && (
-                  <p>
-                    Papel declarado:{" "}
-                    {humanizeRole(t.actor.role_at_creation)}
-                  </p>
-                )}
-                <p>
-                  Criado em{" "}
-                  {new Date(t.created_at).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ➕ CRIAR SCHEDULE */}
-          <div
-            className="pt-2 border-t"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="pt-2 border-t">
             <AnimalTreatmentScheduleCreateForm
+              animalId={animalId}
               treatmentPublicId={t.treatment_public_id}
               onCreated={async () => {
                 const treatments = await fetchAnimalTreatments(animalId);
-                setItems(treatments);
+                setItems(
+                  treatments.sort((a, b) => {
+                    const da = new Date(a.created_at).getTime();
+                    const db = new Date(b.created_at).getTime();
+                    return db - da;
+                  })
+                );
               }}
             />
           </div>
