@@ -1,3 +1,4 @@
+// /var/www/GSA/animal/frontend/src/components/layout/SideMenu.tsx
 "use client";
 
 import Link from "next/link";
@@ -45,16 +46,12 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
               level === 0 ? "font-medium" : "ml-4",
             ].join(" ")}
           >
-            <span className="w-4 text-xs">
-              {isOpen ? "▼" : "▶"}
-            </span>
+            <span className="w-4 text-xs">{isOpen ? "▼" : "▶"}</span>
             <span>{item.label}</span>
           </button>
 
           {isOpen &&
-            item.children?.map((child) =>
-              renderItem(child, level + 1)
-            )}
+            item.children?.map((child) => renderItem(child, level + 1))}
         </div>
       );
     }
@@ -67,22 +64,15 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
         className={[
           "flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
           level === 0 ? "font-medium" : "ml-4 text-zinc-600",
-          active
-            ? "text-zinc-900"
-            : "text-zinc-600 hover:text-zinc-900",
+          active ? "text-zinc-900" : "text-zinc-600 hover:text-zinc-900",
         ].join(" ")}
       >
-        <span className="w-4 text-xs">
-          {active ? "🐾" : ""}
-        </span>
+        <span className="w-4 text-xs">{active ? "🐾" : ""}</span>
         <span>{item.label}</span>
       </Link>
     );
   }
 
-  /** =========================
-   *  MENU CONTEXTUAL DO ANIMAL
-   *  ========================= */
   const animalMenu =
     animalId && pathname.startsWith(`/dashboard/animals/${animalId}`)
       ? [
@@ -107,6 +97,12 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
                 href: `/dashboard/animals/${animalId}/clinic/medications`,
               },
               {
+                key: "animal-clinic-treatments",
+                label: "Tratamentos",
+                href: `/dashboard/animals/${animalId}/clinic/treatments`,
+              },
+              // Mantive "Vacinação" como estava, mas se não existir rota, remova.
+              {
                 key: "animal-clinic-vaccines",
                 label: "Vacinação",
                 href: `/dashboard/animals/${animalId}/clinic/vaccination`,
@@ -119,9 +115,7 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
   const content = (
     <nav className="flex flex-col gap-1 px-3 py-4">
       {animalMenu.map((item) => renderItem(item))}
-      {animalMenu.length > 0 && (
-        <div className="my-2 border-t" />
-      )}
+      {animalMenu.length > 0 && <div className="my-2 border-t" />}
       {MENU_ITEMS.map((item) => renderItem(item))}
     </nav>
   );
@@ -152,9 +146,7 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
             onClick={() => setOpen(false)}
           />
           <div className="relative h-full w-56 bg-white shadow-xl">
-            <div className="border-b px-4 py-3 text-sm font-semibold">
-              Menu
-            </div>
+            <div className="border-b px-4 py-3 text-sm font-semibold">Menu</div>
             {content}
           </div>
         </div>
