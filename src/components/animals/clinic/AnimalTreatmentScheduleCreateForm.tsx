@@ -15,6 +15,7 @@ type Props = {
 };
 
 type Mode = "COUNT" | "UNTIL";
+type DosageUnit = "gotas" | "comprimido" | "mg" | "g" | "ml";
 
 const MAX_COUNT = 365;
 
@@ -43,16 +44,19 @@ function addDays(baseYmd: string, days: number): string {
 
 function buildPreviewDates(
   startYmd: string,
-  intervalDays: number,
+  intervalInDays: number,
   mode: Mode,
   count: number,
   until: string
 ) {
-  if (!startYmd || intervalDays < 1) return { dates: [], endsAtYmd: "" };
+  if (!startYmd || intervalInDays < 1) return { dates: [], endsAtYmd: "" };
 
   const endsAtYmd =
     mode === "COUNT"
-      ? addDays(startYmd, (Math.max(1, Math.min(MAX_COUNT, count)) - 1) * intervalDays)
+      ? addDays(
+        startYmd,
+        (Math.max(1, Math.min(MAX_COUNT, count)) - 1) * intervalInDays
+      )
       : until || "";
 
   const dates: string[] = [];
@@ -64,8 +68,13 @@ function buildPreviewDates(
   let current = startYmd;
   for (let i = 0; i < total && dates.length < 3; i++) {
     dates.push(current);
-    current = addDays(current, intervalDays);
-    if (mode === "UNTIL" && endsAtYmd && new Date(current) > new Date(endsAtYmd)) break;
+    current = addDays(current, intervalInDays);
+    if (
+      mode === "UNTIL" &&
+      endsAtYmd &&
+      new Date(current) > new Date(endsAtYmd)
+    )
+      break;
   }
 
   return { dates, endsAtYmd };
@@ -79,7 +88,7 @@ export function AnimalTreatmentScheduleCreateForm({
   const [open, setOpen] = useState(false);
 
   const [startsAt, setStartsAt] = useState(""); // YYYY-MM-DD
-  const [intervalDays, setIntervalDays] = useState(1);
+  const [intervalInDays, setIntervalInDays] = useState(1);
 
   const [timesPerDay, setTimesPerDay] = useState(2);
   const [time1, setTime1] = useState("08:00");
@@ -91,10 +100,19 @@ export function AnimalTreatmentScheduleCreateForm({
   const [count, setCount] = useState(7);
   const [until, setUntil] = useState("");
 
-  const [dosage, setDosage] = useState("");
+  const [medicationName, setMedicationName] = useState("");
+
+  // 🔹 DOSAGEM
+  const [dosageDescription, setDosageDescription] = useState("");
+  const [dosageAmount, setDosageAmount] = useState<number | "">("");
+  const [dosageUnit, setDosageUnit] = useState<DosageUnit>("gotas");
+  const [pillMg, setPillMg] = useState<number | "">("");
+  const [notes, setNotes] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+
 
   const times = useMemo(() => {
     const pool = [time1, time2, time3, time4].map(normalizeTime);
@@ -103,8 +121,30 @@ export function AnimalTreatmentScheduleCreateForm({
   }, [time1, time2, time3, time4, timesPerDay]);
 
   const preview = useMemo(() => {
-    return buildPreviewDates(startsAt, intervalDays, mode, count, until);
-  }, [startsAt, intervalDays, mode, count, until]);
+    return buildPreviewDates(startsAt, intervalInDays, mode, count, until);
+  }, [startsAt, intervalInDays, mode, count, until]);
+
+  function syncDosageString(
+    amount: number | "",
+    unit: DosageUnit,
+    mg: number | ""
+  ) {
+    if (amount === "" || amount <= 0) {
+      setDosageDescription("");
+      return;
+    }
+
+    if (unit === "comprimido") {
+      if (mg === "" || mg <= 0) {
+        setDosageDescription("");
+        return;
+      }
+      setDosageDescription(`${amount} comprimido (${mg} mg)`);
+      return;
+    }
+
+    setDosageDescription(`${amount} ${unit}`);
+  }
 
   async function submit() {
     setError(null);
@@ -114,7 +154,7 @@ export function AnimalTreatmentScheduleCreateForm({
       return;
     }
 
-    if (intervalDays < 1) {
+    if (intervalInDays < 1) {
       setError("Intervalo em dias inválido.");
       return;
     }
@@ -124,10 +164,15 @@ export function AnimalTreatmentScheduleCreateForm({
       return;
     }
 
-    if (!Array.isArray(times) || times.length !== Math.max(1, Math.min(4, timesPerDay))) {
+    if (
+      !Array.isArray(times) ||
+      times.length !== Math.max(1, Math.min(4, timesPerDay))
+    ) {
       setError("Horários inválidos.");
       return;
     }
+
+
 
     let endsAtYmd = "";
 
@@ -136,7 +181,7 @@ export function AnimalTreatmentScheduleCreateForm({
         setError(`Número de repetições inválido (1 a ${MAX_COUNT}).`);
         return;
       }
-      endsAtYmd = addDays(startsAt, (count - 1) * intervalDays);
+      endsAtYmd = addDays(startsAt, (count - 1) * intervalInDays);
     } else {
       if (!until) {
         setError("Data final obrigatória neste modo.");
@@ -149,50 +194,130 @@ export function AnimalTreatmentScheduleCreateForm({
       endsAtYmd = until;
     }
 
-    const payloadBase: Omit<CreateTreatmentSchedulePayload, "preferred_time"> = {
+    function onlyNumber(
+      value: string,
+      allowDecimal = false
+    ): string {
+      const regex = allowDecimal
+        ? /[^0-9.,]/g
+        : /[^0-9]/g;
+
+      return value.replace(regex, "").replace(",", ".");
+    }
+
+    const medicationNameValue =
+  medicationName.trim() === "" ? null : medicationName.trim();
+
+    const dosagePerUnit =
+      dosageUnit === "comprimido" && pillMg !== "" && pillMg > 0
+        ? String(pillMg)
+        : null;
+
+    const payloadBase: Omit<CreateTreatmentSchedulePayload, "interval_execution_time"> =
+    {
       frequency_type: "interval_days",
       starts_at: toIsoStart(startsAt),
       ends_at: endsAtYmd ? toIsoEnd(endsAtYmd) : null,
-      interval_days: intervalDays,
-      dosage: dosage.trim() || null,
-      generate_agenda: true,
-    };
+      interval_in_days: intervalInDays,
 
+      dosage_description: dosageDescription.trim() || null,
+      dosage_amount:
+        dosageAmount === "" || dosageAmount <= 0 ? null : String(dosageAmount),
+      dosage_unit: dosageUnit || null,
+      dosage_per_unit: dosagePerUnit,
+
+      notes: notes.trim() || null,
+
+      should_generate_agenda: true,
+    };
+    const finalDosageDescription =
+      dosageAmount && dosageUnit
+        ? dosageUnit === "comprimido"
+          ? `${dosageAmount} comprimido (${pillMg} mg)`
+          : `${dosageAmount} ${dosageUnit}`
+        : null;
     try {
       setLoading(true);
 
-      // ✅ 2x/dia = 2 schedules (cadeias independentes) com MESMA frequência de dias
-      for (const t of times) {
+      const isDailyTimes = timesPerDay > 1;
+
+      if (isDailyTimes) {
+        // === DAILY_TIMES ===
         await createTreatmentSchedule(treatmentPublicId, {
-          ...payloadBase,
-          preferred_time: t,
+          frequency_type: "daily_times",
+
+          starts_at: toIsoStart(startsAt),
+          ends_at: endsAtYmd ? toIsoEnd(endsAtYmd) : null,
+
+          daily_times_count: times.length,
+          daily_times: times,
+
+          medication_name: medicationNameValue,
+
+          dosage_description: finalDosageDescription,
+          dosage_amount:
+            dosageAmount === "" || Number(dosageAmount) <= 0
+              ? null
+              : String(dosageAmount),
+          dosage_unit: dosageUnit,
+          dosage_per_unit:
+            dosageUnit === "comprimido" ? String(pillMg) : null,
+          notes: notes.trim() || null,
+
+          should_generate_agenda: true,
+        });
+      } else {
+        // === INTERVAL_DAYS ===
+        await createTreatmentSchedule(treatmentPublicId, {
+          frequency_type: "interval_days",
+
+          starts_at: toIsoStart(startsAt),
+          ends_at: endsAtYmd ? toIsoEnd(endsAtYmd) : null,
+
+          interval_in_days: intervalInDays,
+          interval_execution_time: times[0],
+
+           medication_name: medicationNameValue,
+
+          dosage_description: finalDosageDescription,
+          dosage_amount:
+            dosageAmount === "" || Number(dosageAmount) <= 0
+              ? null
+              : String(dosageAmount),
+          dosage_unit: dosageUnit,
+          dosage_per_unit:
+            dosageUnit === "comprimido" ? String(pillMg) : null,
+          notes: notes.trim() || null,
+
+          should_generate_agenda: true,
         });
       }
 
+      // === RESET FORM ===
       setStartsAt("");
-      setIntervalDays(1);
-
+      setIntervalInDays(1);
       setTimesPerDay(2);
       setTime1("08:00");
       setTime2("20:00");
       setTime3("12:00");
       setTime4("18:00");
-
       setMode("COUNT");
       setCount(7);
       setUntil("");
-
-      setDosage("");
+      setDosageDescription("");
+      setDosageAmount("");
+      setDosageUnit("gotas");
+      setPillMg("");
+      setNotes("");
 
       setOpen(false);
       await onCreated();
-    } catch (e: any) {
+    } catch {
       setError("Erro ao criar agendamento do tratamento.");
     } finally {
       setLoading(false);
     }
   }
-
   if (!open) {
     return (
       <button
@@ -209,6 +334,7 @@ export function AnimalTreatmentScheduleCreateForm({
     <div className="mt-2 rounded border bg-zinc-50 p-3 space-y-3">
       {error && <p className="text-xs text-red-600">{error}</p>}
 
+      {/* Início / intervalo */}
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <label className="text-xs text-zinc-600">Início</label>
@@ -225,10 +351,66 @@ export function AnimalTreatmentScheduleCreateForm({
           <input
             type="number"
             min={1}
-            value={intervalDays}
-            onChange={(e) => setIntervalDays(Number(e.target.value))}
+            value={intervalInDays}
+            onChange={(e) => setIntervalInDays(Number(e.target.value))}
             className="w-full rounded border px-2 py-1 text-sm"
           />
+        </div>
+      </div>
+      {/* NOME MEDICAMENTO */}
+      <input
+        type="text"
+        placeholder="Nome do medicamento (ex: Amoxicilina)"
+        value={medicationName}
+        onChange={(e) => setMedicationName(e.target.value)}
+        className="w-full rounded border px-2 py-1 text-sm"
+      />
+
+      {/* DOSAGEM */}
+      <div className="space-y-1">
+        <label className="text-xs text-zinc-600">Dosagem</label>
+        <div className="grid grid-cols-3 gap-2">
+          <input
+            type="number"
+            placeholder="Qtd"
+            value={dosageAmount}
+            onChange={(e) => {
+              const v = e.target.value === "" ? "" : Number(e.target.value);
+              setDosageAmount(v);
+              syncDosageString(v, dosageUnit, pillMg);
+            }}
+            className="rounded border px-2 py-1 text-sm"
+          />
+          <select
+            value={dosageUnit}
+            onChange={(e) => {
+              const u = e.target.value as DosageUnit;
+              setDosageUnit(u);
+              syncDosageString(dosageAmount, u, pillMg);
+            }}
+            className="rounded border px-2 py-1 text-sm"
+          >
+            <option value="gotas">gotas</option>
+            <option value="comprimido">comprimido</option>
+            <option value="mg">mg</option>
+            <option value="g">g</option>
+            <option value="ml">ml</option>
+          </select>
+          {dosageUnit === "comprimido" ? (
+            <input
+              type="number"
+              placeholder="mg / comprimido"
+              value={pillMg}
+              onChange={(e) => {
+                const m = e.target.value === "" ? "" : Number(e.target.value);
+                setPillMg(m);
+                syncDosageString(dosageAmount, dosageUnit, m);
+              }}
+              className="rounded border px-2 py-1 text-sm"
+            />
+          ) : (
+            <div />
+          )}
         </div>
       </div>
 
@@ -276,7 +458,8 @@ export function AnimalTreatmentScheduleCreateForm({
         </div>
 
         <p className="text-[11px] text-zinc-500">
-          Nota: {timesPerDay}x/dia = {timesPerDay} schedules (cadeias independentes) → {timesPerDay} tarefas por dia de ocorrência.
+          Nota: {timesPerDay}x/dia = {timesPerDay} schedules (cadeias
+          independentes) → {timesPerDay} tarefas por dia de ocorrência.
         </p>
       </div>
 
@@ -310,78 +493,80 @@ export function AnimalTreatmentScheduleCreateForm({
           )}
         </div>
 
+        {startsAt && intervalInDays >= 1 && (
+          <div className="text-xs bg-white border rounded px-3 py-2 space-y-1">
+            <p className="font-medium text-zinc-800">Preview (datas)</p>
 
+            {(() => {
+              const total =
+                mode === "COUNT"
+                  ? Math.max(1, Math.min(MAX_COUNT, count))
+                  : null;
 
-{startsAt && intervalDays >= 1 && (
-  <div className="text-xs bg-white border rounded px-3 py-2 space-y-1">
-    <p className="font-medium text-zinc-800">Preview (datas)</p>
+              const allDates =
+                mode === "COUNT"
+                  ? Array.from({ length: total ?? 0 }).map((_, i) =>
+                    addDays(startsAt, i * intervalInDays)
+                  )
+                  : preview.dates;
 
-    {(() => {
-      const total =
-        mode === "COUNT"
-          ? Math.max(1, Math.min(MAX_COUNT, count))
-          : null;
+              const first = allDates.slice(0, 3);
+              const last =
+                mode === "COUNT" && allDates.length > 3
+                  ? allDates[allDates.length - 1]
+                  : null;
 
-      // gera lista completa só se COUNT (no UNTIL pode ser grande/indefinido)
-      const allDates =
-        mode === "COUNT"
-          ? Array.from({ length: total ?? 0 }).map((_, i) =>
-              addDays(startsAt, i * intervalDays)
-            )
-          : preview.dates; // no UNTIL fica só amostra (3)
+              return (
+                <>
+                  <ul className="list-disc pl-4 text-zinc-700 space-y-0.5">
+                    {first.map((d) => (
+                      <li key={d}>
+                        {new Date(`${d}T00:00:00`).toLocaleDateString()} —
+                        horários: {times.join(", ")}
+                      </li>
+                    ))}
 
-      const first = allDates.slice(0, 3);
-      const last = mode === "COUNT" && allDates.length > 3
-        ? allDates[allDates.length - 1]
-        : null;
+                    {last && (
+                      <li key={last} className="text-zinc-500">
+                        … (mais {allDates.length - 4} ocorrências)
+                      </li>
+                    )}
 
-      return (
-        <>
-          <ul className="list-disc pl-4 text-zinc-700 space-y-0.5">
-            {first.map((d) => (
-              <li key={d}>
-                {new Date(`${d}T00:00:00`).toLocaleDateString()} — horários:{" "}
-                {times.join(", ")}
-              </li>
-            ))}
+                    {last && (
+                      <li key={`${last}-final`} className="text-zinc-700">
+                        {new Date(`${last}T00:00:00`).toLocaleDateString()} —
+                        horários: {times.join(", ")}{" "}
+                        <span className="text-zinc-500">(última)</span>
+                      </li>
+                    )}
+                  </ul>
 
-            {last && (
-              <li key={last} className="text-zinc-500">
-                … (mais {allDates.length - 4} ocorrências)
-              </li>
-            )}
+                  {mode === "COUNT" && (
+                    <p className="text-zinc-500">
+                      Total de ocorrências: {allDates.length}
+                    </p>
+                  )}
 
-            {last && (
-              <li key={`${last}-final`} className="text-zinc-700">
-                {new Date(`${last}T00:00:00`).toLocaleDateString()} — horários:{" "}
-                {times.join(", ")} <span className="text-zinc-500">(última)</span>
-              </li>
-            )}
-          </ul>
-
-          {mode === "COUNT" && (
-            <p className="text-zinc-500">
-              Total de ocorrências: {allDates.length}
-            </p>
-          )}
-
-          {preview.endsAtYmd && (
-            <p className="text-zinc-500">
-              Termina em:{" "}
-              {new Date(`${preview.endsAtYmd}T00:00:00`).toLocaleDateString()}
-            </p>
-          )}
-        </>
-      );
-    })()}
-  </div>
-)}
+                  {preview.endsAtYmd && (
+                    <p className="text-zinc-500">
+                      Termina em:{" "}
+                      {new Date(
+                        `${preview.endsAtYmd}T00:00:00`
+                      ).toLocaleDateString()}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
-      <input
-        placeholder="Dosagem / observações (opcional)"
-        value={dosage}
-        onChange={(e) => setDosage(e.target.value)}
+      <textarea
+        placeholder="Observações, cuidados extras na aplicação da medicação"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={3}
         className="w-full rounded border px-2 py-1 text-sm"
       />
 
@@ -404,7 +589,6 @@ export function AnimalTreatmentScheduleCreateForm({
         </button>
       </div>
 
-      {/* animalId está aqui (não usado ainda), mas vai ser o fio pra ligar preview real e vincular tasks por origem */}
       <input type="hidden" value={animalId} readOnly />
     </div>
   );
