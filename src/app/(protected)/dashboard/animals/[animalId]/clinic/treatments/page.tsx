@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AnimalTreatmentScheduleCreateForm } from "@/components/animals/clinic/AnimalTreatmentScheduleCreateForm";
 import { AnimalTreatmentCreateForm } from "@/components/animals/clinic/AnimalTreatmentCreateForm";
 import { fetchAnimalTreatments, TreatmentDTO } from "@/services/animalTreatments";
+import type { TreatmentScheduleDTO } from "@/services/animalTreatments";
 
 function humanizeStatus(status: string) {
   const s = (status || "").toLowerCase();
@@ -20,6 +21,21 @@ function humanizeRole(role?: string | null) {
   if (role === "medico_veterinario") return "Médico veterinário";
   if (role === "tutor") return "Tutor";
   return role;
+}
+
+function renderFrequencyLabel(s: TreatmentScheduleDTO): string {
+  if (s.frequency_type === "daily_times") {
+    return `${s.daily_times_count}x por dia`;
+  }
+
+  if (s.frequency_type === "interval_days") {
+    if (s.interval_in_days === 1) {
+      return "Diário";
+    }
+    return `A cada ${s.interval_in_days} dias`;
+  }
+
+  return "";
 }
 
 export default function AnimalClinicTreatmentsPage() {
@@ -169,6 +185,72 @@ export default function AnimalClinicTreatmentsPage() {
               className="pt-2 border-t"
               onClick={(e) => e.stopPropagation()}
             >
+
+
+{/* SCHEDULES EXISTENTES */}
+{t.schedules && t.schedules.length > 0 && (
+  <div className="space-y-2 pt-2 border-t">
+    <p className="text-xs font-medium text-zinc-700">
+      Medicações / Procedimentos
+    </p>
+
+    {t.schedules.map((s) => (
+      <div
+        key={s.schedule_public_id}
+        className="rounded border bg-zinc-50 p-2 text-xs space-y-1"
+      >
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-zinc-600">
+            {s.schedule_public_id}
+          </span>
+
+<span className="px-2 py-0.5 rounded bg-zinc-200 text-zinc-700">
+  {renderFrequencyLabel(s)}
+</span>
+        </div>
+
+        {/* HORÁRIOS */}
+{s.frequency_type === "daily_times" && s.daily_times && (
+  <p className="text-xs text-zinc-700">
+    Horários:{" "}
+    <span className="font-medium">
+      {s.daily_times.join(", ")}
+    </span>
+  </p>
+)}
+
+{s.frequency_type === "interval_days" && s.interval_execution_time && (
+  <p className="text-xs text-zinc-700">
+    Horário:{" "}
+    <span className="font-medium">
+      {s.interval_execution_time}
+    </span>
+  </p>
+)}
+
+        {/* DOSAGEM */}
+        {s.dosage_description && (
+          <p>Dosagem: {s.dosage_description}</p>
+        )}
+
+        {/* OBSERVAÇÕES */}
+        {s.notes && (
+          <p className="italic text-zinc-600">
+            {s.notes}
+          </p>
+        )}
+
+        <p className="text-zinc-500">
+          Início:{" "}
+          {new Date(s.starts_at).toLocaleDateString()}
+          {s.ends_at &&
+            ` • Fim: ${new Date(s.ends_at).toLocaleDateString()}`}
+        </p>
+      </div>
+    ))}
+  </div>
+)}
+              
               <AnimalTreatmentScheduleCreateForm
                 animalId={animalId}
                 treatmentPublicId={t.treatment_public_id}

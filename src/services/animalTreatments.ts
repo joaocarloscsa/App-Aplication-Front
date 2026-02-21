@@ -21,20 +21,30 @@ export type TreatmentScheduleDTO = {
   schedule_id: number;
   schedule_public_id: string;
 
-  frequency: string;
-  times_per_day?: number | null;
-  times?: string[] | null;
-  interval_days?: number | null;
-  preferred_time?: string | null;
-  dosage?: string | null;
+  frequency_type: "daily_times" | "interval_days";
 
-  generate_agenda: boolean;
-  agenda_generated: boolean;
+  // DAILY_TIMES
+  daily_times_count: number | null;
+  daily_times: string[] | null;
+
+  // INTERVAL_DAYS
+  interval_in_days: number | null;
+  interval_execution_time: string | null;
+
+  // DOSAGEM
+  dosage_description: string | null;
+  dosage_amount: string | null;
+  dosage_unit: string | null;
+  dosage_per_unit: string | null;
+
+  notes: string | null;
+
+  starts_at: string;
+  ends_at: string | null;
+  created_at: string;
 
   status: string;
-  starts_at: string;
-  ends_at?: string | null;
-  created_at: string;
+  agenda_was_generated: boolean;
 };
 
 export type TreatmentDTO = {
