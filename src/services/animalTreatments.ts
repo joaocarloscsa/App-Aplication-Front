@@ -17,7 +17,7 @@ export type TreatmentActorDTO = {
   role_source: string;
 };
 
-export type TreatmentScheduleDTO = {
+/* export type TreatmentScheduleDTO = {
   schedule_id: number;
   schedule_public_id: string;
 
@@ -45,6 +45,33 @@ export type TreatmentScheduleDTO = {
 
   status: string;
   agenda_was_generated: boolean;
+}; */
+
+export type TreatmentScheduleDTO = {
+  schedule_public_id: string;
+
+  medication_name?: string | null;
+
+  frequency_type: "daily_times" | "interval_days";
+
+  daily_times?: string[] | null;
+  daily_times_count?: number | null;
+
+  interval_in_days?: number | null;
+  interval_execution_time?: string | null;
+
+  dosage_description?: string | null;
+  notes?: string | null;
+
+  starts_at: string;
+  ends_at?: string | null;
+
+  status: "active" | "paused" | "cancelled";
+
+  created_by?: {
+    person_public_id: string;
+    name: string;
+  } | null;
 };
 
 export type TreatmentDTO = {

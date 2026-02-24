@@ -1,26 +1,24 @@
-import { http } from "@/services/http";
-
 export type CreateTreatmentSchedulePayload = {
-  frequency: string;
-  times_per_day?: number | null;
-  times?: string[] | null;
-  interval_days?: number | null;
-  preferred_time?: string | null;
-  dosage?: string | null;
+  frequency_type: "daily_times" | "interval_days";
+
   starts_at: string;
   ends_at?: string | null;
-  generate_agenda?: boolean;
-};
 
-export async function createTreatmentSchedule(
-  treatmentPublicId: string,
-  payload: CreateTreatmentSchedulePayload
-): Promise<{ schedule_public_id: string }> {
-  return http(
-    `/api/v1/treatments/${treatmentPublicId}/schedules`,
-    {
-      method: "POST",
-      body: payload,
-    }
-  );
-}
+  // daily_times
+  daily_times_count?: number;
+  daily_times?: string[];
+
+  // interval_days
+  interval_in_days?: number;
+  interval_execution_time?: string | null;
+
+  dosage_description?: string | null;
+  dosage_amount?: string | null;
+  dosage_unit?: string | null;
+  dosage_per_unit?: string | null;
+
+  medication_name?: string | null;
+  notes?: string | null;
+
+  should_generate_agenda?: boolean;
+};
