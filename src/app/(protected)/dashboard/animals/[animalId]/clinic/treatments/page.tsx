@@ -6,6 +6,7 @@ import { AnimalTreatmentScheduleCreateForm } from "@/components/animals/clinic/A
 import { AnimalTreatmentCreateForm } from "@/components/animals/clinic/AnimalTreatmentCreateForm";
 import { fetchAnimalTreatments, TreatmentDTO } from "@/services/animalTreatments";
 import type { TreatmentScheduleDTO } from "@/services/animalTreatments";
+import { TreatmentStatusActions } from "@/components/animals/clinic/TreatmentStatusActions";
 
 function humanizeStatus(status: string) {
   const s = (status || "").toLowerCase();
@@ -179,6 +180,11 @@ export default function AnimalClinicTreatmentsPage() {
                 )}
               </div>
             )}
+<TreatmentStatusActions
+  treatmentPublicId={t.treatment_public_id}
+  currentStatus={t.status}
+  onChanged={reload}
+/>
 
             {/* SCHEDULES — NÃO INTERFERE NA EXPANSÃO */}
             <div
@@ -186,71 +192,97 @@ export default function AnimalClinicTreatmentsPage() {
               onClick={(e) => e.stopPropagation()}
             >
 
+              {/* METADADOS SEMPRE VISÍVEIS */}
+              <div className="text-xs text-zinc-600 space-y-0.5">
+                <p>
+                  Criado por{" "}
+                  <span className="font-medium">
+                    {t.created_by?.name ?? "—"}
+                  </span>
+                  {t.actor?.role_at_creation && (
+                    <>
+                      {" "}
+                      •{" "}
+                      <span className="italic">
+                        {humanizeRole(t.actor.role_at_creation)}
+                      </span>
+                    </>
+                  )}
+                </p>
 
-{/* SCHEDULES EXISTENTES */}
-{t.schedules && t.schedules.length > 0 && (
-  <div className="space-y-2 pt-2 border-t">
-    <p className="text-xs font-medium text-zinc-700">
-      Medicações / Procedimentos
-    </p>
+                <p>
+                  Início: {new Date(t.starts_at).toLocaleString()}
+                  {t.ends_at
+                    ? ` • Fim: ${new Date(t.ends_at).toLocaleString()}`
+                    : ""}
+                </p>
+              </div>
 
-    {t.schedules.map((s) => (
-      <div
-        key={s.schedule_public_id}
-        className="rounded border bg-zinc-50 p-2 text-xs space-y-1"
-      >
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-zinc-600">
-            {s.schedule_public_id}
-          </span>
 
-<span className="px-2 py-0.5 rounded bg-zinc-200 text-zinc-700">
-  {renderFrequencyLabel(s)}
-</span>
-        </div>
+              {/* SCHEDULES EXISTENTES */}
+              {t.schedules && t.schedules.length > 0 && (
+                <div className="space-y-2 pt-2 border-t">
+                  <p className="text-xs font-medium text-zinc-700">
+                    Medicações / Procedimentos
+                  </p>
 
-        {/* HORÁRIOS */}
-{s.frequency_type === "daily_times" && s.daily_times && (
-  <p className="text-xs text-zinc-700">
-    Horários:{" "}
-    <span className="font-medium">
-      {s.daily_times.join(", ")}
-    </span>
-  </p>
-)}
+                  {t.schedules.map((s) => (
+                    <div
+                      key={s.schedule_public_id}
+                      className="rounded border bg-zinc-50 p-2 text-xs space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-zinc-600">
+                          {s.schedule_public_id}
+                        </span>
 
-{s.frequency_type === "interval_days" && s.interval_execution_time && (
-  <p className="text-xs text-zinc-700">
-    Horário:{" "}
-    <span className="font-medium">
-      {s.interval_execution_time}
-    </span>
-  </p>
-)}
+                        <span className="px-2 py-0.5 rounded bg-zinc-200 text-zinc-700">
+                          {renderFrequencyLabel(s)}
+                        </span>
+                      </div>
 
-        {/* DOSAGEM */}
-        {s.dosage_description && (
-          <p>Dosagem: {s.dosage_description}</p>
-        )}
+                      {/* HORÁRIOS */}
+                      {s.frequency_type === "daily_times" && s.daily_times && (
+                        <p className="text-xs text-zinc-700">
+                          Horários:{" "}
+                          <span className="font-medium">
+                            {s.daily_times.join(", ")}
+                          </span>
+                        </p>
+                      )}
 
-        {/* OBSERVAÇÕES */}
-        {s.notes && (
-          <p className="italic text-zinc-600">
-            {s.notes}
-          </p>
-        )}
+                      {s.frequency_type === "interval_days" && s.interval_execution_time && (
+                        <p className="text-xs text-zinc-700">
+                          Horário:{" "}
+                          <span className="font-medium">
+                            {s.interval_execution_time}
+                          </span>
+                        </p>
+                      )}
 
-        <p className="text-zinc-500">
-          Início:{" "}
-          {new Date(s.starts_at).toLocaleDateString()}
-          {s.ends_at &&
-            ` • Fim: ${new Date(s.ends_at).toLocaleDateString()}`}
-        </p>
-      </div>
-    ))}
-  </div>
-)}
-              
+                      {/* DOSAGEM */}
+                      {s.dosage_description && (
+                        <p>Dosagem: {s.dosage_description}</p>
+                      )}
+
+                      {/* OBSERVAÇÕES */}
+                      {s.notes && (
+                        <p className="italic text-zinc-600">
+                          {s.notes}
+                        </p>
+                      )}
+
+                      <p className="text-zinc-500">
+                        Início:{" "}
+                        {new Date(s.starts_at).toLocaleDateString()}
+                        {s.ends_at &&
+                          ` • Fim: ${new Date(s.ends_at).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <AnimalTreatmentScheduleCreateForm
                 animalId={animalId}
                 treatmentPublicId={t.treatment_public_id}
