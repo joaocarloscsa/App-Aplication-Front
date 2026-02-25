@@ -120,4 +120,3 @@ export async function http<T>(
 
   return (await response.json()) as T;
 }
-

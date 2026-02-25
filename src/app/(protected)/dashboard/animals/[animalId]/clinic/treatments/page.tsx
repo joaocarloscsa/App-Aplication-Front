@@ -13,9 +13,8 @@ import { TreatmentStatusActions } from "@/components/animals/clinic/TreatmentSta
 import { CollapsibleNotes } from "@/components/common/CollapsibleNotes";
 import { MedicationNotes } from "@/components/common/MedicationNotes";
 import { TreatmentScheduleStatusActions } from "@/components/animals/clinic/TreatmentScheduleStatusActions";
-import { MedicationStatusHistory } from "@/components/animals/clinic/MedicationStatusHistory";
-import { TreatmentScheduleTimeline } from
-  "@/components/animals/clinic/TreatmentScheduleTimeline";
+import { TreatmentScheduleTimeline } from "@/components/animals/clinic/TreatmentScheduleTimeline";
+import { HttpError } from "@/services/http";
 
 /* =========================
  * Helpers
@@ -85,9 +84,10 @@ export default function AnimalClinicTreatmentsPage() {
     null
   );
 
-  async function reload() {
-    if (!animalId) return;
+async function reload() {
+  if (!animalId) return;
 
+  try {
     const treatments = await fetchAnimalTreatments(animalId);
 
     setItems(
@@ -99,8 +99,24 @@ export default function AnimalClinicTreatmentsPage() {
             new Date(a.created_at).getTime()
         )
     );
-  }
 
+    setError(null);
+  } catch (e) {
+    if (e instanceof HttpError) {
+      const code = (e.body as any)?.error ?? null;
+
+      if (code === "unauthenticated") {
+        setError("Sessão expirada. Faça login novamente.");
+        return;
+      }
+
+      setError("Erro ao carregar tratamentos.");
+      return;
+    }
+
+    setError("Erro inesperado ao carregar tratamentos.");
+  }
+}
   useEffect(() => {
     reload()
       .catch(() => setError("Erro ao carregar tratamentos."))
@@ -329,9 +345,6 @@ export default function AnimalClinicTreatmentsPage() {
                       currentStatus={s.status}
                       onChanged={reload}
                     />
-
-                  {/* HISTÓRICO (opcional / detalhado) */}
-                  <MedicationStatusHistory events={s.status_events} />
                 </div>
               );
             })}

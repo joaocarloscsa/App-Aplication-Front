@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { changeTreatmentStatus } from "@/services/treatmentStatus";
+import { HttpError } from "@/services/http";
 
 type Props = {
   treatmentPublicId: string;
@@ -41,8 +42,32 @@ export function TreatmentStatusActions({
       setNotes("");
       setOpenAction(null);
       await onChanged();
-    } catch {
-      setError("Erro ao alterar o estado do tratamento.");
+    } catch (e) {
+      if (e instanceof HttpError) {
+        const code = (e.body as any)?.error?.code;
+
+        if (code === "treatment_has_active_schedules") {
+          setError(
+            "Não é possível finalizar o tratamento enquanto existirem prescrições ativas. Finalize ou cancele todas as medicações primeiro."
+          );
+          return;
+        }
+
+        if (code === "invalid_status_transition") {
+          setError("Esta alteração de estado não é permitida.");
+          return;
+        }
+
+        if (code === "notes_required") {
+          setError("A observação é obrigatória.");
+          return;
+        }
+
+        setError("Erro ao alterar o estado do tratamento.");
+        return;
+      }
+
+      setError("Erro inesperado.");
     } finally {
       setLoading(false);
     }
