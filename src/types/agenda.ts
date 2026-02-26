@@ -98,13 +98,16 @@ export interface AnimalTaskItem {
 
   source: TaskSource;
 
+  // 🔗 NOVOS CAMPOS (origem clínica)
+  treatment_public_id?: string | null;
+  treatment_schedule_public_id?: string | null;
+
   created_by: {
     person_public_id: string;
     name: string;
   };
 
   last_action: TaskLastAction | null;
-
   recurrence_context: TaskRecurrenceContext | null;
 }
 

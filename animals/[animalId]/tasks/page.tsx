@@ -180,11 +180,13 @@ export default function AnimalAgendaTasksPage() {
           const rc = task.recurrence_context;
 
           return (
+            
             <li
               key={task.id}
               onClick={() => setExpandedId(expandedItem ? null : task.id)}
               className={`rounded-md border px-4 py-3 space-y-2 cursor-pointer ${stateStyle[visualState]}`}
             >
+              
               {/* HEADER */}
               <div className="flex justify-between items-start gap-3">
                 <p className="font-medium text-zinc-900">{task.title}</p>
@@ -317,7 +319,13 @@ export default function AnimalAgendaTasksPage() {
                       type="button"
                       onClick={async (e) => {
                         e.stopPropagation();
-                        await markTaskDone(animalId, task.id);
+                      const c = prompt("Comentário (opcional):");
+                      if (c === null) return;
+                      await markTaskDone(
+                        animalId,
+                        task.id,
+                        c.trim() || null
+                      );
                         await load();
                       }}
                       className="text-green-700 hover:underline"
@@ -325,20 +333,29 @@ export default function AnimalAgendaTasksPage() {
                       ✔ Feita
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        const ok = confirm("Cancelar esta tarefa?");
-                        if (!ok) return;
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
 
-                        await cancelTask(animalId, task.id);
-                        await load();
-                      }}
-                      className="text-red-700 hover:underline"
-                    >
-                      ✖ Cancelar tarefa
-                    </button>
+                          const ok = confirm("Cancelar esta tarefa?");
+                          if (!ok) return;
+
+                          const c = prompt("Comentário (opcional):");
+                          if (c === null) return;
+
+                          await cancelTask(
+                            animalId,
+                            task.id,
+                            c.trim() || null
+                          );
+
+                          await load();
+                        }}
+                        className="text-red-700 hover:underline"
+                      >
+                        ✖ Cancelar tarefa
+                      </button>
                   </>
                 )}
 
@@ -347,7 +364,16 @@ export default function AnimalAgendaTasksPage() {
                     type="button"
                     onClick={async (e) => {
                       e.stopPropagation();
-                      await reopenTask(animalId, task.id);
+
+                      const c = prompt("Motivo da reabertura (opcional):");
+                      if (c === null) return;
+
+                      await reopenTask(
+                        animalId,
+                        task.id,
+                        c.trim() || null
+                      );
+
                       await load();
                     }}
                     className="text-amber-700 hover:underline"

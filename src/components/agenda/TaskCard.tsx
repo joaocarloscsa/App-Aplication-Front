@@ -51,6 +51,8 @@ export function TaskCard({
   const rc = task.recurrence_context ?? null;
   const last = task.last_action ?? null;
 
+  const isTreatment = task.source === "TREATMENT";
+
   const canMarkDone = status === "PLANNED";
   const canReopen = status === "DONE";
   const canCancel = status === "PLANNED";
@@ -81,6 +83,12 @@ export function TaskCard({
             )}
           </div>
 
+          {isTreatment && (
+            <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
+              Tratamento clínico
+            </span>
+          )}
+
           {task.description && (
             <p className="text-sm text-zinc-800 whitespace-pre-line">
               {task.description}
@@ -105,6 +113,57 @@ export function TaskCard({
               {task.created_by.name}
             </span>
           </p>
+
+          <div className="flex items-center gap-2">
+  <p className="font-medium text-zinc-900 truncate">
+    {task.title}
+  </p>
+
+  <span
+    className={[
+      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+      statusBadgeClasses(status),
+    ].join(" ")}
+  >
+    {statusLabel(status)}
+  </span>
+
+  {isTreatment && (
+    <span className="inline-flex items-center rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-semibold">
+      Tratamento
+    </span>
+  )}
+
+  {dueSoon && status === "PLANNED" && (
+    <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">
+      Atrasada
+    </span>
+  )}
+</div>
+
+
+
+{/*           {isTreatment && (
+            <div className="text-xs text-zinc-500 space-y-0.5">
+              {task.treatment_public_id && (
+                <div>
+                  Tratamento ID:{" "}
+                  <span className="font-mono">
+                    {task.treatment_public_id}
+                  </span>
+                </div>
+              )}
+
+              {task.treatment_schedule_public_id && (
+                <div>
+                  Medicação ID:{" "}
+                  <span className="font-mono">
+                    {task.treatment_schedule_public_id}
+                  </span>
+                </div>
+              )}
+            </div>
+          )} */}
 
           {/* 🔍 ÚLTIMA AÇÃO (AUDITORIA) */}
           {last && last.by && (

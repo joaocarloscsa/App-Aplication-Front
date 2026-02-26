@@ -178,6 +178,7 @@ export default function AnimalAgendaTasksPage() {
           const expandedItem = expandedId === task.id;
           const visualState = getTaskVisualState(task);
           const rc = task.recurrence_context;
+          const isTreatment = task.source === "TREATMENT";
 
           return (
             <li
@@ -195,6 +196,14 @@ export default function AnimalAgendaTasksPage() {
                   {task.status}
                 </span>
               </div>
+
+              {isTreatment && (
+  <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
+    Tratamento clínico
+  </span>
+)}
+
+
 
               {/* DESCRIÇÃO HUMANA (canónica) */}
               {task.description && (
@@ -300,7 +309,27 @@ export default function AnimalAgendaTasksPage() {
               </p>
 
               {expandedItem && (
+
+                
                 <div className="border-t pt-3 text-xs text-zinc-600 space-y-1">
+
+                    <div className="pt-2 space-y-1 text-xs text-zinc-500">
+    {task.treatment_public_id && (
+      <p>
+        <strong>Tratamento:</strong>{" "}
+        <span className="font-mono">{task.treatment_public_id}</span>
+      </p>
+    )}
+
+    {task.treatment_schedule_public_id && (
+      <p>
+        <strong>Medicação:</strong>{" "}
+        <span className="font-mono">{task.treatment_schedule_public_id}</span>
+      </p>
+    )}
+  </div>
+
+
                   <p>
                     <strong>Criada em:</strong>{" "}
                     {new Date(task.created_at).toLocaleString()}

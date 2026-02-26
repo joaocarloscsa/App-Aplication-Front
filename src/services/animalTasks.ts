@@ -39,36 +39,54 @@ export async function markTaskDone(
   animalId: string,
   taskId: number,
   comment?: string | null
-): Promise<void> {
-  await apiFetch(`/api/v1/animals/${animalId}/tasks/${taskId}/done`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ comment: comment ?? null }),
-  });
+) {
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/done`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:
+        comment !== undefined
+          ? JSON.stringify({ comment })
+          : undefined,
+    }
+  );
 }
 
 export async function reopenTask(
   animalId: string,
   taskId: number,
   comment?: string | null
-): Promise<void> {
-  await apiFetch(`/api/v1/animals/${animalId}/tasks/${taskId}/reopen`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ comment: comment ?? null }),
-  });
+) {
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/reopen`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:
+        comment !== undefined
+          ? JSON.stringify({ comment })
+          : undefined,
+    }
+  );
 }
 
 export async function cancelTask(
   animalId: string,
   taskId: number,
   comment?: string | null
-): Promise<void> {
-  await apiFetch(`/api/v1/animals/${animalId}/tasks/${taskId}/cancel`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ comment: comment ?? null }),
-  });
+) {
+  return apiFetch(
+    `/api/v1/animals/${animalId}/tasks/${taskId}/cancel`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:
+        comment !== undefined
+          ? JSON.stringify({ comment })
+          : undefined,
+    }
+  );
 }
 
 // frontend/src/services/animalTasks.ts
