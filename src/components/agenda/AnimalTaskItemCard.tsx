@@ -98,7 +98,7 @@ export function AnimalTaskItemCard({
           
 {isTreatment && (
   <span className="inline-flex items-center rounded-md bg-blue-100 text-blue-900 px-2.5 py-1 text-xs font-semibold border border-blue-300">
-    🏥 Tratamento clínico
+    🏥
   </span>
 )}
         </div>

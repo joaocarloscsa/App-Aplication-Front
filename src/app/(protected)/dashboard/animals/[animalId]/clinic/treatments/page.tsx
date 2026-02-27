@@ -15,6 +15,7 @@ import { MedicationNotes } from "@/components/common/MedicationNotes";
 import { TreatmentScheduleStatusActions } from "@/components/animals/clinic/TreatmentScheduleStatusActions";
 import { TreatmentScheduleTimeline } from "@/components/animals/clinic/TreatmentScheduleTimeline";
 import { HttpError } from "@/services/http";
+import { CopyId } from "@/components/dashboard/CopyId";
 
 /* =========================
  * Helpers
@@ -50,23 +51,43 @@ function renderFrequencyLabel(s: TreatmentScheduleDTO): string {
 }
 
 function renderScheduleStatus(status: string) {
-  if (status === "active")
-    return (
-      <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-green-100 text-green-800">
-        Ativa
-      </span>
-    );
-  if (status === "paused")
-    return (
-      <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">
-        Suspensa
-      </span>
-    );
-  return (
-    <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-red-100 text-red-800">
-      Cancelada
-    </span>
-  );
+  switch (status) {
+    case "active":
+      return (
+        <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-green-100 text-green-800">
+          Ativa
+        </span>
+      );
+
+    case "paused":
+      return (
+        <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">
+          Suspensa
+        </span>
+      );
+
+    case "finished":
+      return (
+        <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+          Finalizada
+        </span>
+      );
+
+    case "cancelled":
+    case "canceled":
+      return (
+        <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-red-100 text-red-800">
+          Cancelada
+        </span>
+      );
+
+    default:
+      return (
+        <span className="inline-block text-[11px] px-2 py-0.5 rounded bg-zinc-200 text-zinc-700">
+          {status}
+        </span>
+      );
+  }
 }
 
 /* =========================
@@ -187,7 +208,7 @@ async function reload() {
             <div className="min-w-0 space-y-0.5">
               <p className="font-medium text-zinc-900 truncate">{t.name}</p>
               <p className="text-xs text-zinc-500 font-mono">
-                {t.treatment_public_id}
+                {t.treatment_public_id} 
               </p>
             </div>
 
@@ -267,7 +288,7 @@ async function reload() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-0.5">
                       <p className="text-sm font-semibold text-zinc-900">
-                        {title}
+                        {title} <span className="text-[11px] text-zinc-400 font-mono">( {s.schedule_public_id} ) <CopyId id={s.schedule_public_id} showValue={false} /></span>
                       </p>
 
                       {s.created_by ? (
@@ -277,7 +298,7 @@ async function reload() {
                             {s.created_by.name}
                           </span>{" "}
                           <span className="font-mono">
-                            ({s.created_by.person_public_id})
+                            ( {s.created_by.person_public_id} ) <CopyId id={s.created_by.person_public_id} showValue={false} />
                           </span>
                         </p>
                       ) : (
@@ -341,7 +362,7 @@ async function reload() {
                    
                     {/* AÇÕES */}
                     <TreatmentScheduleStatusActions
-                      schedulePublicId={s.schedule_public_id}
+                      schedulePublicId={s.schedule_public_id}  
                       currentStatus={s.status}
                       onChanged={reload}
                     />
