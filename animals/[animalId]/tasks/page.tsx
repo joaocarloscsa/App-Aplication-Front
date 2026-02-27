@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { AnimalTaskItemCard } from "@/components/agenda/AnimalTaskItemCard";
 
 import {
   getAnimalTasks,
@@ -172,219 +173,21 @@ export default function AnimalAgendaTasksPage() {
         onChangeTo={setTo}
         onChangeStatus={setStatusFilter}
       />
-
       <ul className="space-y-3">
-        {tasks.map((task) => {
-          const expandedItem = expandedId === task.id;
-          const visualState = getTaskVisualState(task);
-          const rc = task.recurrence_context;
-
-          return (
-            
-            <li
-              key={task.id}
-              onClick={() => setExpandedId(expandedItem ? null : task.id)}
-              className={`rounded-md border px-4 py-3 space-y-2 cursor-pointer ${stateStyle[visualState]}`}
-            >
-              
-              {/* HEADER */}
-              <div className="flex justify-between items-start gap-3">
-                <p className="font-medium text-zinc-900">{task.title}</p>
-
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[task.status]}`}
-                >
-                  {task.status}
-                </span>
-              </div>
-
-              {/* DESCRIÇÃO HUMANA (canónica) */}
-              {task.description && (
-                <p className="text-sm text-zinc-800 whitespace-pre-line">
-                  {task.description}
-                </p>
-              )}
-
-              {/* CONTEXTO DE RECORRÊNCIA */}
-              {rc?.index && rc?.total && (
-                <p className="text-xs text-zinc-500 flex items-center gap-2">
-                  <span>
-                    🔁 Repetição {rc.index} de {rc.total}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-
-                      const ok = confirm(
-                        "Cancelar toda a recorrência?\n\n" +
-                          "As ocorrências futuras que ainda não foram concluídas " +
-                          "serão canceladas.\n\n" +
-                          "As ocorrências já concluídas serão mantidas."
-                      );
-
-                      if (!ok) return;
-
-                      await cancelTaskRecurrence(
-                        animalId,
-                        task.id,
-                        "Recorrência cancelada pelo utilizador",
-                        true
-                      );
-
-                      await load();
-                    }}
-                    className="text-zinc-400 hover:text-zinc-600 hover:underline"
-                  >
-                    Cancelar todas
-                  </button>
-                </p>
-              )}
-
-              <p className="text-xs text-zinc-500">
-                {task.scheduled_at
-                  ? new Date(task.scheduled_at).toLocaleString()
-                  : "Sem data"}
-              </p>
-
-              {expandedItem && (
-                <div className="border-t pt-3 text-xs text-zinc-600 space-y-1">
-                  <p>
-                    <strong>Criada em:</strong>{" "}
-                    {new Date(task.created_at).toLocaleString()}
-                  </p>
-
-                  <p>
-                    <strong>Criada por:</strong> {task.created_by.name}
-                  </p>
-
-                  {task.last_action && (
-                    <>
-                      <p className="pt-1">
-                        <strong>Última ação:</strong>{" "}
-                        {task.last_action.action === "completed"
-                          ? "Concluída"
-                          : task.last_action.action === "canceled"
-                          ? "Cancelada"
-                          : task.last_action.action === "reopened"
-                          ? "Reaberta"
-                          : task.last_action.action}
-                      </p>
-
-                      {"by" in task.last_action &&
-                        (task.last_action as any).by?.name && (
-                          <p>
-                            <strong>Por:</strong>{" "}
-                            {(task.last_action as any).by.name}
-                          </p>
-                        )}
-
-                      <p>
-                        <strong>Em:</strong>{" "}
-                        {new Date(task.last_action.at).toLocaleString()}
-                      </p>
-
-                      {task.last_action.comment && (
-                        <p className="italic text-zinc-500">
-                          “{task.last_action.comment}”
-                        </p>
-                      )}
-
-                      {"source" in task.last_action &&
-                        (task.last_action as any).source &&
-                        (task.last_action as any).source !== "MANUAL" && (
-                          <p className="text-zinc-500">
-                            Origem:{" "}
-                            {(task.last_action as any).source === "TREATMENT"
-                              ? "Tratamento"
-                              : (task.last_action as any).source === "SYSTEM"
-                              ? "Sistema"
-                              : (task.last_action as any).source}
-                          </p>
-                        )}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* ACTIONS */}
-              <div
-                className="flex gap-3 text-xs"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {task.status === "PLANNED" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                      const c = prompt("Comentário (opcional):");
-                      if (c === null) return;
-                      await markTaskDone(
-                        animalId,
-                        task.id,
-                        c.trim() || null
-                      );
-                        await load();
-                      }}
-                      className="text-green-700 hover:underline"
-                    >
-                      ✔ Feita
-                    </button>
-
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-
-                          const ok = confirm("Cancelar esta tarefa?");
-                          if (!ok) return;
-
-                          const c = prompt("Comentário (opcional):");
-                          if (c === null) return;
-
-                          await cancelTask(
-                            animalId,
-                            task.id,
-                            c.trim() || null
-                          );
-
-                          await load();
-                        }}
-                        className="text-red-700 hover:underline"
-                      >
-                        ✖ Cancelar tarefa
-                      </button>
-                  </>
-                )}
-
-                {(task.status === "DONE" || task.status === "CANCELED") && (
-                  <button
-                    type="button"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-
-                      const c = prompt("Motivo da reabertura (opcional):");
-                      if (c === null) return;
-
-                      await reopenTask(
-                        animalId,
-                        task.id,
-                        c.trim() || null
-                      );
-
-                      await load();
-                    }}
-                    className="text-amber-700 hover:underline"
-                  >
-                    ↺ Reabrir
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
+        {tasks.map((task) => (
+          <AnimalTaskItemCard
+            key={task.id}
+            animalId={animalId}
+            task={task}
+            expanded={expandedId === task.id}
+            onToggleExpand={() =>
+              setExpandedId(
+                expandedId === task.id ? null : task.id
+              )
+            }
+            onReload={load}
+          />
+        ))}
       </ul>
     </section>
   );
