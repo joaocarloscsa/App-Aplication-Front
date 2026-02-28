@@ -1,10 +1,11 @@
+// /var/www/GSA/animal/frontend/src/components/animals/clinic/TreatmentScheduleTimeline.tsx
 "use client";
 
 type Event = {
-  action: "paused" | "resumed" | "finished" | "cancelled";
-  notes: string;
+  action: string; // <- aceitar string real do backend
+  notes?: string | null;
   performed_at: string;
-  performed_by: {
+  performed_by?: {
     person_public_id: string;
     name: string;
   } | null;
@@ -14,49 +15,54 @@ type Props = {
   events: Event[];
 };
 
+function humanizeAction(action: string) {
+  switch (action) {
+    case "paused":
+      return "Suspenso";
+    case "finished":
+      return "Finalizado";
+    case "cancelled":
+      return "Cancelado";
+    case "resumed":
+      return "Reativado";
+    case "created":
+      return "Criado";
+    default:
+      return action;
+  }
+}
+
 export function TreatmentScheduleTimeline({ events }: Props) {
   if (!events || events.length === 0) return null;
 
   return (
-    <div className="mt-2 border-t pt-2 space-y-2">
-      <p className="text-xs font-semibold text-zinc-700">
-        Histórico da prescrição
-      </p>
+    <div className="border-t pt-2 space-y-2 text-xs">
+      {events.map((e, idx) => (
+        <div key={idx} className="text-zinc-600">
+          <div>
+            <span className="font-medium">
+              {humanizeAction(e.action)}
+            </span>{" "}
+            em{" "}
+            {new Date(e.performed_at).toLocaleString("pt-PT")}
+          </div>
 
-      <ul className="space-y-1">
-        {events.map((e, i) => (
-          <li
-            key={i}
-            className="text-xs text-zinc-600 flex flex-col gap-0.5"
-          >
-            <span>
-              <strong>{humanizeAction(e.action)}</strong>{" "}
-              em {new Date(e.performed_at).toLocaleString()}
-            </span>
-
-            {e.performed_by && (
-              <span className="text-[11px] text-zinc-500">
-                por {e.performed_by.name} ({e.performed_by.person_public_id})
+          {e.performed_by && (
+            <div>
+              por{" "}
+              <span className="font-medium">
+                {e.performed_by.name}
               </span>
-            )}
+            </div>
+          )}
 
-            {e.notes && (
-              <span className="italic text-zinc-500">
-                “{e.notes}”
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
+          {e.notes && (
+            <div className="italic text-zinc-500">
+              {e.notes}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
-}
-
-function humanizeAction(action: string) {
-  return {
-    paused: "Suspensa",
-    resumed: "Retomada",
-    finished: "Finalizada",
-    cancelled: "Cancelada",
-  }[action] ?? action;
 }

@@ -1,141 +1,129 @@
-// path: src/services/animalTreatments.ts
+// /var/www/GSA/animal/frontend/src/services/animalTreatments.ts
 
 import { http } from "@/services/http";
 
 /* =========================
-   TYPES (READ)
-========================= */
+ * Shared DTOs
+ * ========================= */
 
-export type TreatmentCreatedByDTO = {
+export type PersonRefDTO = {
   person_public_id: string;
   name: string;
 };
 
-export type TreatmentActorDTO = {
-  role_at_creation: string;
-  role_source: string;
-};
-
-export type TreatmentScheduleStatusEventDTO = {
-  action: "paused" | "resumed" | "finished" | "cancelled";
-  notes: string;
-  performed_at: string;
-  performed_by: {
-    person_public_id: string;
-    name: string;
-  } | null;
-};
-
-
-
 export type TreatmentScheduleDTO = {
-  schedule_id?: number;
   schedule_public_id: string;
-
   medication_name?: string | null;
 
-  frequency_type: "daily_times" | "interval_days";
+  administration_route: {
+    code: string;
+    label: string;
+    display_label: string;
+  };
 
-  daily_times_count?: number | null;
-  daily_times?: string[] | null;
+  frequency: {
+    type: "daily_times" | "interval_days";
+    daily?: {
+      times_per_day?: number | null;
+      times?: string[] | null;
+    };
+    interval?: {
+      days?: number | null;
+      execution_time?: string | null;
+    };
+  };
 
-  interval_in_days?: number | null;
-  interval_execution_time?: string | null;
+  dosage?: {
+    amount?: string | null;
+    unit?: {
+      code: string;
+      label: string;
+    } | null;
+    strength?: {
+      value?: string | null;
+      unit?: {
+        code: string;
+        label: string;
+      } | null;
+    } | null;
+  } | null;
 
-  dosage_description?: string | null;
-  dosage_amount?: string | null;
-  dosage_unit?: string | null;
-  dosage_per_unit?: string | null;
+  period: {
+    starts_at: string;
+    ends_at?: string | null;
+  };
 
-  notes?: string | null;
-
-  starts_at: string;
-  ends_at?: string | null;
-  created_at: string;
-
-  status: "active" | "paused" | "finished" | "cancelled";
-  agenda_was_generated: boolean;
+  meta: {
+    created_at: string;
+    status: string;
+    agenda_generated: boolean;
+  };
 
   created_by?: {
     person_public_id: string;
     name: string;
   } | null;
 
-  /**
-   * HISTÓRICO DA PRESCRIÇÃO (timeline)
-   * - vem do backend como "status_history"
-   */
-  status_history: TreatmentScheduleStatusEventDTO[];
+  notes?: string | null;
+  status_history?: any[];
 };
-
 
 export type TreatmentDTO = {
   treatment_id: number;
   treatment_public_id: string;
-
   name: string;
   notes?: string | null;
   status: string;
-
   starts_at: string;
   ends_at?: string | null;
   created_at: string;
-
-  created_by?: TreatmentCreatedByDTO | null;
-  actor: TreatmentActorDTO;
-
+  created_by?: PersonRefDTO | null;
+  actor?: {
+    role_at_creation?: string | null;
+    role_source?: string | null;
+  };
   schedules: TreatmentScheduleDTO[];
 };
 
-export type TreatmentListResponse = {
+/* =========================
+ * Fetch
+ * ========================= */
+
+type AnimalTreatmentsResponse = {
   treatments: TreatmentDTO[];
 };
-
-/* =========================
-   LIST TREATMENTS
-========================= */
 
 export async function fetchAnimalTreatments(
   animalPublicId: string
 ): Promise<TreatmentDTO[]> {
-  const res = await http<TreatmentListResponse>(
-    `/api/v1/animals/${animalPublicId}/treatments`,
-    { method: "GET" }
-  );
+  const res = (await http(
+    `/api/v1/animals/${animalPublicId}/treatments`
+  )) as AnimalTreatmentsResponse;
 
   return res.treatments ?? [];
 }
 
 /* =========================
-   CREATE TREATMENT
-========================= */
+ * Create Treatment (RESTORED)
+ * ========================= */
 
-export type CreateTreatmentPayload = {
+export type CreateAnimalTreatmentPayload = {
   name: string;
-  starts_at: string; // ISO
-  ends_at?: string | null;
-
   notes?: string | null;
-
-  actor_role_at_creation: string;
-  actor_role_source: string;
-};
-
-export type CreateTreatmentResponse = {
-  treatment_public_id: string;
+  starts_at: string;
 };
 
 export async function createAnimalTreatment(
   animalPublicId: string,
-  payload: CreateTreatmentPayload
-): Promise<string> {
-  const res = await http<{ treatment_public_id: string }>(
+  payload: CreateAnimalTreatmentPayload
+): Promise<{
+  treatment_public_id: string;
+}> {
+  return http(
     `/api/v1/animals/${animalPublicId}/treatments`,
     {
       method: "POST",
       body: payload,
     }
   );
-
-  return res.treatment_public_id;
 }

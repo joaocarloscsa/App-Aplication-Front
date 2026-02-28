@@ -70,8 +70,8 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
           </div>
 
           <div className="flex items-center gap-2 text-sm text-zinc-600">
-            <span className="font-mono">{animal.public_id}</span>
-            <CopyId id={animal.public_id} />
+            <span className="font-mono"><CopyId id={animal.public_id} /></span>
+            
           </div>
 
           {/* ✅ convite só para tutor principal (via permissão do backend) */}
@@ -101,9 +101,9 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
             <div className="text-sm font-medium flex items-center gap-2">
               <span>{animal.tutors.primary.name}</span>
               <span className="text-xs font-mono text-zinc-500">
-                ({animal.tutors.primary.person_public_id})
+                <CopyId id={animal.tutors.primary.person_public_id} />
               </span>
-              <CopyId id={animal.tutors.primary.person_public_id} />
+              
             </div>
           </div>
         )}

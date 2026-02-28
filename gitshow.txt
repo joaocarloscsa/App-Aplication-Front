@@ -1,0 +1,1043 @@
+diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/treatments/page.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/treatments/page.tsx
+index 9e20918..756e152 100644
+--- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/treatments/page.tsx
++++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/treatments/page.tsx
+@@ -16,6 +16,7 @@ import { TreatmentScheduleStatusActions } from "@/components/animals/clinic/Trea
+ import { TreatmentScheduleTimeline } from "@/components/animals/clinic/TreatmentScheduleTimeline";
+ import { HttpError } from "@/services/http";
+ import { CopyId } from "@/components/dashboard/CopyId";
++import { TreatmentSchedulesSection } from "@/components/animals/clinic/TreatmentSchedulesSection";
+ 
+ /* =========================
+  * Helpers
+@@ -258,136 +259,15 @@ async function reload() {
+             onChanged={reload}
+           />
+ 
+-          {/* PRESCRIÇÕES */}
+-          <div
+-            className="pt-3 border-t space-y-3"
+-            onClick={(e) => e.stopPropagation()}
+-          >
+-            <p className="text-xs font-semibold text-zinc-800">
+-              Prescrições (medicações / procedimentos)
+-            </p>
+ 
+-            {t.schedules.length === 0 && (
+-              <p className="text-xs text-zinc-500 italic">
+-                Nenhuma prescrição registrada neste tratamento.
+-              </p>
+-            )}
+-
+-            {t.schedules.map((s) => {
+-              const title =
+-                s.medication_name ||
+-                s.dosage_description ||
+-                "Medicação / Procedimento";
+-
+-              return (
+-                <div
+-                  key={s.schedule_public_id}
+-                  className="rounded border bg-zinc-50 p-3 space-y-2 text-xs"
+-                >
+-                  {/* TOPO DA PRESCRIÇÃO */}
+-                  <div className="flex items-start justify-between gap-3">
+-                    <div className="space-y-0.5">
+-                      <p className="text-sm font-semibold text-zinc-900">
+-                        {title} <span className="text-[11px] text-zinc-400 font-mono">( {s.schedule_public_id} ) <CopyId id={s.schedule_public_id} showValue={false} /></span>
+-                      </p>
+-
+-                      {s.created_by ? (
+-                        <p className="text-[11px] text-zinc-500">
+-                          Prescrito por{" "}
+-                          <span className="font-medium">
+-                            {s.created_by.name}
+-                          </span>{" "}
+-                          <span className="font-mono">
+-                            ( {s.created_by.person_public_id} ) <CopyId id={s.created_by.person_public_id} showValue={false} />
+-                          </span>
+-                        </p>
+-                      ) : (
+-                        <p className="text-[11px] text-zinc-400 italic">
+-                          Autor da prescrição não informado
+-                        </p>
+-                      )}
+-                    </div>
+-
+-                    <span className="px-2 py-0.5 rounded bg-zinc-200 text-zinc-700 text-[11px]">
+-                      {renderFrequencyLabel(s)}
+-                    </span>
+-                  </div>
+-
+-                  {/* HORÁRIOS */}
+-                  {s.frequency_type === "daily_times" && s.daily_times && (
+-                    <p>
+-                      Horários:{" "}
+-                      <span className="font-medium">
+-                        {s.daily_times.join(", ")}
+-                      </span>
+-                    </p>
+-                  )}
+-
+-                  {s.frequency_type === "interval_days" &&
+-                    s.interval_execution_time && (
+-                      <p>
+-                        Horário:{" "}
+-                        <span className="font-medium">
+-                          {s.interval_execution_time}
+-                        </span>
+-                      </p>
+-                    )}
+-
+-                  {/* DOSAGEM */}
+-                  {s.dosage_description && (
+-                    <p>Dosagem: {s.dosage_description}</p>
+-                  )}
+-
+-                  {/* NOTAS DA MEDICAÇÃO */}
+-                  {s.notes && (
+-                    <div className="rounded bg-white border p-2 text-zinc-700 text-xs italic">
+-                      {s.notes}
+-                    </div>
+-                  )}
+-
+-                  {/* PERÍODO */}
+-                  <p className="text-zinc-500">
+-                    Início:{" "}
+-                    {new Date(s.starts_at).toLocaleDateString()}
+-                    {s.ends_at &&
+-                      ` • Fim: ${new Date(
+-                        s.ends_at
+-                      ).toLocaleDateString()}`}
+-                  </p>
+-                    {/* TIMELINE DA PRESCRIÇÃO */}
+-                    <TreatmentScheduleTimeline events={s.status_history} />
+-
+-                    {/* STATUS ATUAL */}
+-                    {renderScheduleStatus(s.status)}
+-                   
+-                    {/* AÇÕES */}
+-                    <TreatmentScheduleStatusActions
+-                      schedulePublicId={s.schedule_public_id}  
+-                      currentStatus={s.status}
+-                      onChanged={reload}
+-                    />
+-                </div>
+-              );
+-            })}
+-
+-            
+-
+-            {t.status === "active" ? (
+-              <AnimalTreatmentScheduleCreateForm
+-                animalId={animalId}
+-                treatmentPublicId={t.treatment_public_id}
+-                onCreated={reload}
+-              />
+-            ) : (
+-              <p className="text-xs text-zinc-500 italic">
+-                Não é possível adicionar prescrições a um tratamento{" "}
+-                {t.status === "paused" ? "pausado" : "finalizado"}.
+-              </p>
+-            )}
+ 
+-            
+-          </div>
++          <TreatmentSchedulesSection
++  treatmentPublicId={t.treatment_public_id}
++  schedules={t.schedules}
++  onReload={reload}
++/>
+         </div>
++        
+       );
+     })}
+   </div>
+diff --git a/src/components/animals/clinic/AnimalTreatmentScheduleCreateForm.tsx b/src/components/animals/clinic/AnimalTreatmentScheduleCreateForm.tsx
+index 3217933..9c6bfc8 100644
+--- a/src/components/animals/clinic/AnimalTreatmentScheduleCreateForm.tsx
++++ b/src/components/animals/clinic/AnimalTreatmentScheduleCreateForm.tsx
+@@ -1,595 +1,132 @@
+-// path: frontend/src/components/animals/clinic/AnimalTreatmentScheduleCreateForm.tsx
+-
+ "use client";
+ 
+-import { useMemo, useState } from "react";
++import { useEffect, useState } from "react";
++import { createTreatmentSchedule } from "@/services/treatmentSchedules";
+ import {
+-  createTreatmentSchedule,
+-  CreateTreatmentSchedulePayload,
+-} from "@/services/treatmentSchedules";
++  fetchAdministrationRoutes,
++  AdministrationRouteDTO,
++} from "@/services/treatmentConfig";
++
++import { useTreatmentScheduleForm } from "./hooks/useTreatmentScheduleForm";
++
++import { RouteSection } from "./sections/RouteSection";
++import { DosageSection } from "./sections/DosageSection";
++import { FrequencySection } from "./sections/FrequencySection";
++import { RecurrenceSection } from "./sections/RecurrenceSection";
++import { TimesSection } from "./sections/TimesSection";
++import { PreviewSection } from "./sections/PreviewSection";
+ 
+ type Props = {
+   treatmentPublicId: string;
+-  animalId: string; // ✅ existe, e vai ser útil depois
+-  onCreated(): Promise<void> | void;
++  onCreated: () => Promise<void> | void;
+ };
+ 
+-type Mode = "COUNT" | "UNTIL";
+-type DosageUnit = "gotas" | "comprimido" | "mg" | "g" | "ml";
+-
+-const MAX_COUNT = 365;
+-
+-function normalizeTime(v: string): string {
+-  const t = (v || "").trim();
+-  if (/^\d{2}:\d{2}$/.test(t)) return t;
+-  return "08:00";
+-}
+-
+-function toIsoStart(dateYmd: string): string {
+-  return new Date(`${dateYmd}T00:00:00`).toISOString();
+-}
+-
+-function toIsoEnd(dateYmd: string): string {
+-  return new Date(`${dateYmd}T23:59:59`).toISOString();
+-}
+-
+-function addDays(baseYmd: string, days: number): string {
+-  const d = new Date(`${baseYmd}T00:00:00`);
+-  d.setDate(d.getDate() + days);
+-  const yyyy = d.getFullYear();
+-  const mm = String(d.getMonth() + 1).padStart(2, "0");
+-  const dd = String(d.getDate()).padStart(2, "0");
+-  return `${yyyy}-${mm}-${dd}`;
+-}
+-
+-function buildPreviewDates(
+-  startYmd: string,
+-  intervalInDays: number,
+-  mode: Mode,
+-  count: number,
+-  until: string
+-) {
+-  if (!startYmd || intervalInDays < 1) return { dates: [], endsAtYmd: "" };
+-
+-  const endsAtYmd =
+-    mode === "COUNT"
+-      ? addDays(
+-        startYmd,
+-        (Math.max(1, Math.min(MAX_COUNT, count)) - 1) * intervalInDays
+-      )
+-      : until || "";
+-
+-  const dates: string[] = [];
+-  const total =
+-    mode === "COUNT"
+-      ? Math.max(1, Math.min(MAX_COUNT, count))
+-      : 9999; // só pra limitar preview
+-
+-  let current = startYmd;
+-  for (let i = 0; i < total && dates.length < 3; i++) {
+-    dates.push(current);
+-    current = addDays(current, intervalInDays);
+-    if (
+-      mode === "UNTIL" &&
+-      endsAtYmd &&
+-      new Date(current) > new Date(endsAtYmd)
+-    )
+-      break;
+-  }
+-
+-  return { dates, endsAtYmd };
+-}
+-
+ export function AnimalTreatmentScheduleCreateForm({
+   treatmentPublicId,
+-  animalId,
+   onCreated,
+ }: Props) {
+-  const [open, setOpen] = useState(false);
+-
+-  const [startsAt, setStartsAt] = useState(""); // YYYY-MM-DD
+-  const [intervalInDays, setIntervalInDays] = useState(1);
+-
+-  const [timesPerDay, setTimesPerDay] = useState(2);
+-  const [time1, setTime1] = useState("08:00");
+-  const [time2, setTime2] = useState("20:00");
+-  const [time3, setTime3] = useState("12:00");
+-  const [time4, setTime4] = useState("18:00");
+-
+-  const [mode, setMode] = useState<Mode>("COUNT");
+-  const [count, setCount] = useState(7);
+-  const [until, setUntil] = useState("");
+-
+-  const [medicationName, setMedicationName] = useState("");
+-
+-  // 🔹 DOSAGEM
+-  const [dosageDescription, setDosageDescription] = useState("");
+-  const [dosageAmount, setDosageAmount] = useState<number | "">("");
+-  const [dosageUnit, setDosageUnit] = useState<DosageUnit>("gotas");
+-  const [pillMg, setPillMg] = useState<number | "">("");
+-  const [notes, setNotes] = useState("");
++  const form = useTreatmentScheduleForm();
+ 
++  const [routes, setRoutes] = useState<AdministrationRouteDTO[]>([]);
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+ 
++  useEffect(() => {
++    fetchAdministrationRoutes().then(setRoutes);
++  }, []);
+ 
++  const selectedRouteObj = routes.find(
++    (r) => r.public_id === form.selectedRoute
++  );
+ 
+-  const times = useMemo(() => {
+-    const pool = [time1, time2, time3, time4].map(normalizeTime);
+-    const n = Math.max(1, Math.min(4, timesPerDay));
+-    return pool.slice(0, n);
+-  }, [time1, time2, time3, time4, timesPerDay]);
+-
+-  const preview = useMemo(() => {
+-    return buildPreviewDates(startsAt, intervalInDays, mode, count, until);
+-  }, [startsAt, intervalInDays, mode, count, until]);
++  async function submit() {
++    setError(null);
+ 
+-  function syncDosageString(
+-    amount: number | "",
+-    unit: DosageUnit,
+-    mg: number | ""
+-  ) {
+-    if (amount === "" || amount <= 0) {
+-      setDosageDescription("");
++    if (!form.selectedRoute) {
++      setError("Via obrigatória.");
+       return;
+     }
+ 
+-    if (unit === "comprimido") {
+-      if (mg === "" || mg <= 0) {
+-        setDosageDescription("");
+-        return;
+-      }
+-      setDosageDescription(`${amount} comprimido (${mg} mg)`);
++    if (!form.startsAt) {
++      setError("Data inicial obrigatória.");
+       return;
+     }
+ 
+-    setDosageDescription(`${amount} ${unit}`);
+-  }
++    try {
++      setLoading(true);
+ 
+-  async function submit() {
+-    setError(null);
++await createTreatmentSchedule(treatmentPublicId, {
++  frequency_type: "daily_times",
+ 
+-    if (!startsAt) {
+-      setError("Data de início obrigatória.");
+-      return;
+-    }
++  starts_at: new Date(`${form.startsAt}T00:00:00`).toISOString(),
++  ends_at: form.endsAt,
+ 
+-    if (intervalInDays < 1) {
+-      setError("Intervalo em dias inválido.");
+-      return;
+-    }
++  interval_in_days: form.intervalInDays,
+ 
+-    if (timesPerDay < 1 || timesPerDay > 4) {
+-      setError("Vezes por dia inválido (1 a 4).");
+-      return;
+-    }
+-
+-    if (
+-      !Array.isArray(times) ||
+-      times.length !== Math.max(1, Math.min(4, timesPerDay))
+-    ) {
+-      setError("Horários inválidos.");
+-      return;
+-    }
++  daily_times_count: form.times.length,
++  daily_times: form.times,
+ 
++  administration_route_public_id: form.selectedRoute,
+ 
++  dosage_unit_public_id: form.selectedUnit || null,
+ 
+-    let endsAtYmd = "";
+-
+-    if (mode === "COUNT") {
+-      if (count < 1 || count > MAX_COUNT) {
+-        setError(`Número de repetições inválido (1 a ${MAX_COUNT}).`);
+-        return;
+-      }
+-      endsAtYmd = addDays(startsAt, (count - 1) * intervalInDays);
+-    } else {
+-      if (!until) {
+-        setError("Data final obrigatória neste modo.");
+-        return;
+-      }
+-      if (new Date(until) < new Date(startsAt)) {
+-        setError("A data final deve ser posterior à data inicial.");
+-        return;
+-      }
+-      endsAtYmd = until;
+-    }
++  dosage_amount:
++    form.dosageAmount === "" ? null : String(form.dosageAmount),
+ 
+-    function onlyNumber(
+-      value: string,
+-      allowDecimal = false
+-    ): string {
+-      const regex = allowDecimal
+-        ? /[^0-9.,]/g
+-        : /[^0-9]/g;
++  dosage_per_unit:
++    form.strengthValue === "" ? null : String(form.strengthValue),
+ 
+-      return value.replace(regex, "").replace(",", ".");
+-    }
++  medication_name: form.medicationName || null,
++  notes: form.notes || null,
+ 
+-    const medicationNameValue =
+-  medicationName.trim() === "" ? null : medicationName.trim();
+-
+-    const dosagePerUnit =
+-      dosageUnit === "comprimido" && pillMg !== "" && pillMg > 0
+-        ? String(pillMg)
+-        : null;
+-
+-    const payloadBase: Omit<CreateTreatmentSchedulePayload, "interval_execution_time"> =
+-    {
+-      frequency_type: "interval_days",
+-      starts_at: toIsoStart(startsAt),
+-      ends_at: endsAtYmd ? toIsoEnd(endsAtYmd) : null,
+-      interval_in_days: intervalInDays,
+-
+-      dosage_description: dosageDescription.trim() || null,
+-      dosage_amount:
+-        dosageAmount === "" || dosageAmount <= 0 ? null : String(dosageAmount),
+-      dosage_unit: dosageUnit || null,
+-      dosage_per_unit: dosagePerUnit,
+-
+-      notes: notes.trim() || null,
+-
+-      should_generate_agenda: true,
+-    };
+-    const finalDosageDescription =
+-      dosageAmount && dosageUnit
+-        ? dosageUnit === "comprimido"
+-          ? `${dosageAmount} comprimido (${pillMg} mg)`
+-          : `${dosageAmount} ${dosageUnit}`
+-        : null;
+-    try {
+-      setLoading(true);
++  should_generate_agenda: true,
++});
+ 
+-      const isDailyTimes = timesPerDay > 1;
+-
+-      if (isDailyTimes) {
+-        // === DAILY_TIMES ===
+-        await createTreatmentSchedule(treatmentPublicId, {
+-          frequency_type: "daily_times",
+-
+-          starts_at: toIsoStart(startsAt),
+-          ends_at: endsAtYmd ? toIsoEnd(endsAtYmd) : null,
+-
+-          daily_times_count: times.length,
+-          daily_times: times,
+-
+-          medication_name: medicationNameValue,
+-
+-          dosage_description: finalDosageDescription,
+-          dosage_amount:
+-            dosageAmount === "" || Number(dosageAmount) <= 0
+-              ? null
+-              : String(dosageAmount),
+-          dosage_unit: dosageUnit,
+-          dosage_per_unit:
+-            dosageUnit === "comprimido" ? String(pillMg) : null,
+-          notes: notes.trim() || null,
+-
+-          should_generate_agenda: true,
+-        });
+-      } else {
+-        // === INTERVAL_DAYS ===
+-        await createTreatmentSchedule(treatmentPublicId, {
+-          frequency_type: "interval_days",
+-
+-          starts_at: toIsoStart(startsAt),
+-          ends_at: endsAtYmd ? toIsoEnd(endsAtYmd) : null,
+-
+-          interval_in_days: intervalInDays,
+-          interval_execution_time: times[0],
+-
+-           medication_name: medicationNameValue,
+-
+-          dosage_description: finalDosageDescription,
+-          dosage_amount:
+-            dosageAmount === "" || Number(dosageAmount) <= 0
+-              ? null
+-              : String(dosageAmount),
+-          dosage_unit: dosageUnit,
+-          dosage_per_unit:
+-            dosageUnit === "comprimido" ? String(pillMg) : null,
+-          notes: notes.trim() || null,
+-
+-          should_generate_agenda: true,
+-        });
+-      }
+-
+-      // === RESET FORM ===
+-      setStartsAt("");
+-      setIntervalInDays(1);
+-      setTimesPerDay(2);
+-      setTime1("08:00");
+-      setTime2("20:00");
+-      setTime3("12:00");
+-      setTime4("18:00");
+-      setMode("COUNT");
+-      setCount(7);
+-      setUntil("");
+-      setDosageDescription("");
+-      setDosageAmount("");
+-      setDosageUnit("gotas");
+-      setPillMg("");
+-      setNotes("");
+-
+-      setOpen(false);
+       await onCreated();
+     } catch {
+-      setError("Erro ao criar agendamento do tratamento.");
++      setError("Erro ao criar prescrição.");
+     } finally {
+       setLoading(false);
+     }
+   }
+-  if (!open) {
+-    return (
+-      <button
+-        type="button"
+-        onClick={() => setOpen(true)}
+-        className="text-xs text-zinc-700 hover:underline"
+-      >
+-        + Adicionar medicação / procedimento
+-      </button>
+-    );
+-  }
+ 
+   return (
+-    <div className="mt-2 rounded border bg-zinc-50 p-3 space-y-3">
+-      {error && <p className="text-xs text-red-600">{error}</p>}
+-
+-      {/* Início / intervalo */}
+-      <div className="grid grid-cols-2 gap-2">
+-        <div className="space-y-1">
+-          <label className="text-xs text-zinc-600">Início</label>
+-          <input
+-            type="date"
+-            value={startsAt}
+-            onChange={(e) => setStartsAt(e.target.value)}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-          />
+-        </div>
+-
+-        <div className="space-y-1">
+-          <label className="text-xs text-zinc-600">A cada (dias)</label>
+-          <input
+-            type="number"
+-            min={1}
+-            value={intervalInDays}
+-            onChange={(e) => setIntervalInDays(Number(e.target.value))}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-          />
+-        </div>
+-      </div>
+-      {/* NOME MEDICAMENTO */}
+-      <input
+-        type="text"
+-        placeholder="Nome do medicamento (ex: Amoxicilina)"
+-        value={medicationName}
+-        onChange={(e) => setMedicationName(e.target.value)}
+-        className="w-full rounded border px-2 py-1 text-sm"
+-      />
+-
+-      {/* DOSAGEM */}
+-      <div className="space-y-1">
+-        <label className="text-xs text-zinc-600">Dosagem</label>
+-        <div className="grid grid-cols-3 gap-2">
+-          <input
+-            type="number"
+-            placeholder="Qtd"
+-            value={dosageAmount}
+-            onChange={(e) => {
+-              const v = e.target.value === "" ? "" : Number(e.target.value);
+-              setDosageAmount(v);
+-              syncDosageString(v, dosageUnit, pillMg);
+-            }}
+-            className="rounded border px-2 py-1 text-sm"
+-          />
+-          <select
+-            value={dosageUnit}
+-            onChange={(e) => {
+-              const u = e.target.value as DosageUnit;
+-              setDosageUnit(u);
+-              syncDosageString(dosageAmount, u, pillMg);
+-            }}
+-            className="rounded border px-2 py-1 text-sm"
+-          >
+-            <option value="gotas">gotas</option>
+-            <option value="comprimido">comprimido</option>
+-            <option value="mg">mg</option>
+-            <option value="g">g</option>
+-            <option value="ml">ml</option>
+-          </select>
+-          {dosageUnit === "comprimido" ? (
+-            <input
+-              type="number"
+-              placeholder="mg / comprimido"
+-              value={pillMg}
+-              onChange={(e) => {
+-                const m = e.target.value === "" ? "" : Number(e.target.value);
+-                setPillMg(m);
+-                syncDosageString(dosageAmount, dosageUnit, m);
+-              }}
+-              className="rounded border px-2 py-1 text-sm"
+-            />
+-          ) : (
+-            <div />
+-          )}
+-        </div>
+-      </div>
++    <div className="rounded-lg border bg-white p-5 space-y-5 text-sm shadow-sm">
++      {error && <p className="text-red-600">{error}</p>}
+ 
+-      <div className="space-y-2">
+-        <div className="flex items-center gap-2">
+-          <label className="text-xs text-zinc-600 w-28">Vezes por dia</label>
+-          <input
+-            type="number"
+-            min={1}
+-            max={4}
+-            value={timesPerDay}
+-            onChange={(e) => setTimesPerDay(Number(e.target.value))}
+-            className="w-20 rounded border px-2 py-1 text-sm"
+-          />
+-        </div>
+-
+-        <div className="grid grid-cols-2 gap-2">
+-          <input
+-            type="time"
+-            value={time1}
+-            onChange={(e) => setTime1(e.target.value)}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-          />
+-          <input
+-            type="time"
+-            value={time2}
+-            onChange={(e) => setTime2(e.target.value)}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-            disabled={timesPerDay < 2}
+-          />
+-          <input
+-            type="time"
+-            value={time3}
+-            onChange={(e) => setTime3(e.target.value)}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-            disabled={timesPerDay < 3}
+-          />
+-          <input
+-            type="time"
+-            value={time4}
+-            onChange={(e) => setTime4(e.target.value)}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-            disabled={timesPerDay < 4}
+-          />
+-        </div>
+-
+-        <p className="text-[11px] text-zinc-500">
+-          Nota: {timesPerDay}x/dia = {timesPerDay} schedules (cadeias
+-          independentes) → {timesPerDay} tarefas por dia de ocorrência.
+-        </p>
+-      </div>
++      <RouteSection form={form} routes={routes} />
+ 
+-      <div className="space-y-2">
+-        <div className="grid grid-cols-2 gap-2">
+-          <select
+-            value={mode}
+-            onChange={(e) => setMode(e.target.value as Mode)}
+-            className="w-full rounded border px-2 py-1 text-sm"
+-          >
+-            <option value="COUNT">Nº repetições</option>
+-            <option value="UNTIL">Data final</option>
+-          </select>
+-
+-          {mode === "COUNT" ? (
+-            <input
+-              type="number"
+-              min={1}
+-              max={MAX_COUNT}
+-              value={count}
+-              onChange={(e) => setCount(Number(e.target.value))}
+-              className="w-full rounded border px-2 py-1 text-sm"
+-            />
+-          ) : (
+-            <input
+-              type="date"
+-              value={until}
+-              onChange={(e) => setUntil(e.target.value)}
+-              className="w-full rounded border px-2 py-1 text-sm"
+-            />
+-          )}
+-        </div>
+-
+-        {startsAt && intervalInDays >= 1 && (
+-          <div className="text-xs bg-white border rounded px-3 py-2 space-y-1">
+-            <p className="font-medium text-zinc-800">Preview (datas)</p>
+-
+-            {(() => {
+-              const total =
+-                mode === "COUNT"
+-                  ? Math.max(1, Math.min(MAX_COUNT, count))
+-                  : null;
+-
+-              const allDates =
+-                mode === "COUNT"
+-                  ? Array.from({ length: total ?? 0 }).map((_, i) =>
+-                    addDays(startsAt, i * intervalInDays)
+-                  )
+-                  : preview.dates;
+-
+-              const first = allDates.slice(0, 3);
+-              const last =
+-                mode === "COUNT" && allDates.length > 3
+-                  ? allDates[allDates.length - 1]
+-                  : null;
+-
+-              return (
+-                <>
+-                  <ul className="list-disc pl-4 text-zinc-700 space-y-0.5">
+-                    {first.map((d) => (
+-                      <li key={d}>
+-                        {new Date(`${d}T00:00:00`).toLocaleDateString()} —
+-                        horários: {times.join(", ")}
+-                      </li>
+-                    ))}
+-
+-                    {last && (
+-                      <li key={last} className="text-zinc-500">
+-                        … (mais {allDates.length - 4} ocorrências)
+-                      </li>
+-                    )}
+-
+-                    {last && (
+-                      <li key={`${last}-final`} className="text-zinc-700">
+-                        {new Date(`${last}T00:00:00`).toLocaleDateString()} —
+-                        horários: {times.join(", ")}{" "}
+-                        <span className="text-zinc-500">(última)</span>
+-                      </li>
+-                    )}
+-                  </ul>
+-
+-                  {mode === "COUNT" && (
+-                    <p className="text-zinc-500">
+-                      Total de ocorrências: {allDates.length}
+-                    </p>
+-                  )}
+-
+-                  {preview.endsAtYmd && (
+-                    <p className="text-zinc-500">
+-                      Termina em:{" "}
+-                      {new Date(
+-                        `${preview.endsAtYmd}T00:00:00`
+-                      ).toLocaleDateString()}
+-                    </p>
+-                  )}
+-                </>
+-              );
+-            })()}
+-          </div>
+-        )}
+-      </div>
++      <DosageSection form={form} selectedRouteObj={selectedRouteObj} />
+ 
+-      <textarea
+-        placeholder="Observações, cuidados extras na aplicação da medicação"
+-        value={notes}
+-        onChange={(e) => setNotes(e.target.value)}
+-        rows={3}
+-        className="w-full rounded border px-2 py-1 text-sm"
+-      />
++      <FrequencySection form={form} />
+ 
+-      <div className="flex justify-end gap-2 pt-2">
+-        <button
+-          type="button"
+-          onClick={() => setOpen(false)}
+-          className="text-xs text-zinc-600"
+-        >
+-          Cancelar
+-        </button>
++      <TimesSection form={form} />
+ 
++      <RecurrenceSection form={form} />
++
++      <PreviewSection form={form} />
++
++      {/* OBSERVAÇÕES */}
++      <div>
++        <label className="text-xs text-zinc-600">Observações clínicas</label>
++        <textarea
++          rows={3}
++          value={form.notes}
++          onChange={(e) => form.setNotes(e.target.value)}
++          className="w-full border rounded px-2 py-1"
++        />
++      </div>
++
++      <div className="flex justify-end">
+         <button
+           type="button"
+           onClick={submit}
+           disabled={loading}
+-          className="text-xs rounded bg-zinc-900 px-3 py-1 text-white disabled:opacity-50"
++          className="bg-zinc-900 text-white px-4 py-1.5 rounded"
+         >
+           Salvar
+         </button>
+       </div>
+-
+-      <input type="hidden" value={animalId} readOnly />
+     </div>
+   );
+ }
+\ No newline at end of file
+diff --git a/src/services/treatmentSchedules.ts b/src/services/treatmentSchedules.ts
+index 607a655..e89cd2d 100644
+--- a/src/services/treatmentSchedules.ts
++++ b/src/services/treatmentSchedules.ts
+@@ -1,43 +1,52 @@
+-// path: frontend/src/services/treatmentSchedules.ts
+ import { http } from "@/services/http";
+ 
+ export type TreatmentFrequencyType = "daily_times" | "interval_days";
+ 
+ export type CreateTreatmentSchedulePayload = {
+-  frequency_type: "daily_times" | "interval_days";
++  frequency_type: TreatmentFrequencyType;
++
+   starts_at: string;
+   ends_at?: string | null;
+ 
+-  // daily_times
++  // DAILY_TIMES
+   daily_times_count?: number;
+   daily_times?: string[];
+ 
+-  // interval_days
++  // INTERVAL_DAYS
+   interval_in_days?: number;
+   interval_execution_time?: string | null;
+ 
+-  // extras
+-  medication_name?: string | null;
+-  dosage_description?: string | null;
++  // 🔒 Estrutura obrigatória nova
++  administration_route_public_id: string;
++  dosage_unit_public_id?: string | null;
++
++  // Dados estruturados
+   dosage_amount?: string | null;
+-  dosage_unit?: string | null;
+   dosage_per_unit?: string | null;
++
++  // Descritivos
++  medication_name?: string | null;
++  dosage_description?: string | null;
+   notes?: string | null;
+ 
+   should_generate_agenda?: boolean;
+ };
+ 
+-
+-// path: frontend/src/services/treatmentSchedules.ts
+-
+ const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+ 
+ export async function createTreatmentSchedule(
+   treatmentPublicId: string,
+   payload: CreateTreatmentSchedulePayload
+-): Promise<{ schedule_public_id: string; schedule_id?: number; status?: string }> {
+-  return http(`/api/v1/treatments/${treatmentPublicId}/schedules`, {
+-    method: "POST",
+-    body: payload,
+-  });
++): Promise<{
++  schedule_public_id: string;
++  schedule_id?: number;
++  status?: string;
++}> {
++  return http(
++    `/api/v1/treatments/${treatmentPublicId}/schedules`,
++    {
++      method: "POST",
++      body: payload,
++    }
++  );
+ }
+\ No newline at end of file
+diff --git a/src/components/animals/clinic/TreatmentSchedulesSection.tsx b/src/components/animals/clinic/TreatmentSchedulesSection.tsx
+index b2a0e57..ce1b856 100644
+--- a/src/components/animals/clinic/TreatmentSchedulesSection.tsx
++++ b/src/components/animals/clinic/TreatmentSchedulesSection.tsx
+@@ -7,6 +7,22 @@ type Schedule = {
+   schedule_public_id: string;
+   medication_name?: string | null;
+   status: string;
++
++  frequency_type: "daily_times" | "interval_days";
++  daily_times_count?: number | null;
++  daily_times?: string[] | null;
++  interval_in_days?: number | null;
++
++  dosage_amount?: string | null;
++  dosage_unit?: {
++    label?: string;
++  } | null;
++  dosage_per_unit?: string | null;
++
++  notes?: string | null;
++
++  starts_at: string;
++  ends_at?: string | null;
+ };
+ 
+ type Props = {
+@@ -15,6 +31,30 @@ type Props = {
+   onReload(): Promise<void> | void;
+ };
+ 
++function renderFrequencyBadge(s: Schedule) {
++  if (s.frequency_type === "daily_times") {
++    return `${s.daily_times_count ?? 1}x por dia`;
++  }
++
++  if (s.frequency_type === "interval_days") {
++    if (s.interval_in_days === 1) return "Diário";
++    return `A cada ${s.interval_in_days} dias`;
++  }
++
++  return "";
++}
++
++function renderDosage(s: Schedule) {
++  if (!s.dosage_amount) return null;
++
++  const unit = s.dosage_unit?.label ?? "";
++  const strength = s.dosage_per_unit
++    ? ` (${s.dosage_per_unit})`
++    : "";
++
++  return `${s.dosage_amount} ${unit}${strength}`;
++}
++
+ export function TreatmentSchedulesSection({
+   treatmentPublicId,
+   schedules,
+@@ -40,36 +80,64 @@ export function TreatmentSchedulesSection({
+         )}
+       </div>
+ 
+-      {/* Nenhuma prescrição */}
+       {schedules.length === 0 && !creating && (
+         <p className="text-xs text-zinc-500 italic">
+           Nenhuma prescrição registrada neste tratamento.
+         </p>
+       )}
+ 
+-      {/* Lista de prescrições */}
+       {schedules.map((s) => (
+         <div
+           key={s.schedule_public_id}
+-          className="rounded border bg-white p-3 text-sm space-y-1"
++          className="rounded border bg-white p-4 text-sm space-y-2"
+         >
+-          <div className="flex justify-between items-center">
+-            <p className="font-medium text-zinc-800">
+-              {s.medication_name || "Prescrição"}
+-            </p>
++          {/* HEADER */}
++          <div className="flex justify-between items-start">
++            <div>
++              <p className="font-medium text-zinc-900">
++                {s.medication_name || "Prescrição"}
++              </p>
++
++              <p className="text-xs text-zinc-500 font-mono">
++                {s.schedule_public_id}
++              </p>
++            </div>
+ 
+             <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-100 text-zinc-700">
+-              {s.status}
++              {renderFrequencyBadge(s)}
+             </span>
+           </div>
+ 
+-          <p className="text-[11px] text-zinc-500 font-mono">
+-            {s.schedule_public_id}
++          {/* HORÁRIOS */}
++          {s.daily_times && s.daily_times.length > 0 && (
++            <p className="text-xs text-zinc-600">
++              Horários: {s.daily_times.join(", ")}
++            </p>
++          )}
++
++          {/* DOSAGEM */}
++          {renderDosage(s) && (
++            <p className="text-xs text-zinc-600">
++              Dosagem: {renderDosage(s)}
++            </p>
++          )}
++
++          {/* PERÍODO */}
++          <p className="text-xs text-zinc-500">
++            Início: {new Date(s.starts_at).toLocaleDateString()}
++            {s.ends_at &&
++              ` • Fim: ${new Date(s.ends_at).toLocaleDateString()}`}
+           </p>
++
++          {/* OBSERVAÇÕES */}
++          {s.notes && (
++            <div className="text-xs text-zinc-600 italic border-t pt-2">
++              {s.notes}
++            </div>
++          )}
+         </div>
+       ))}
+ 
+-      {/* Formulário condicional */}
+       {creating && (
+         <div className="pt-2">
+           <AnimalTreatmentScheduleCreateForm
+@@ -93,4 +161,4 @@ export function TreatmentSchedulesSection({
+       )}
+     </div>
+   );
+-}
++}
+\ No newline at end of file
