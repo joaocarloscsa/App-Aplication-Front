@@ -66,32 +66,54 @@ export function AnimalTreatmentScheduleCreateForm({
     try {
       setLoading(true);
 
-      // ✅ datas em UTC explícito (sem timezone drift)
-      const startsAtIso = ymdToUtcStartIso(form.startsAt);
+      if (selectedRouteObj?.rule.requires_dose_amount && !form.dosageAmount) {
+        setError("Quantidade obrigatória.");
+        return;
+      }
 
-      // form.endsAt hoje é ISO (do hook). Vamos normalizar pra YYYY-MM-DD e voltar pra UTC start.
-      const endsAtIso = form.endsAt ? ymdToUtcStartIso(isoToYmd(form.endsAt)) : null;
+      if (selectedRouteObj?.rule.requires_dose_unit && !form.selectedUnit) {
+        setError("Unidade obrigatória.");
+        return;
+      }
+
+      if (selectedRouteObj?.rule.requires_strength) {
+        if (!form.strengthValue || !form.strengthUnit) {
+          setError("Concentração e unidade são obrigatórias para esta via.");
+          return;
+        }
+      }
+
+      const startsAtIso = ymdToUtcStartIso(form.startsAt);
+      const endsAtIso = form.endsAt
+        ? ymdToUtcStartIso(isoToYmd(form.endsAt))
+        : null;
+
+      const isProcedure = selectedRouteObj?.rule?.is_procedure;
 
       await createTreatmentSchedule(treatmentPublicId, {
         frequency_type: "daily_times",
-
         starts_at: startsAtIso,
         ends_at: endsAtIso,
 
         interval_in_days: form.intervalInDays,
-
         daily_times_count: form.times.length,
         daily_times: form.times,
 
         administration_route_public_id: form.selectedRoute,
 
-        dosage_unit_public_id: form.selectedUnit || null,
+        dosage_unit_public_id: isProcedure ? null : form.selectedUnit || null,
 
-        dosage_amount:
-          form.dosageAmount === "" ? null : String(form.dosageAmount),
+        dosage_amount: isProcedure
+          ? null
+          : form.dosageAmount === ""
+            ? null
+            : String(form.dosageAmount),
 
-        dosage_per_unit:
-          form.strengthValue === "" ? null : String(form.strengthValue),
+        dosage_per_unit: isProcedure
+          ? null
+          : form.strengthValue === ""
+            ? null
+            : String(form.strengthValue),
 
         medication_name: form.medicationName || null,
         notes: form.notes || null,
@@ -100,8 +122,20 @@ export function AnimalTreatmentScheduleCreateForm({
       });
 
       await onCreated();
-    } catch {
-      setError("Erro ao criar prescrição.");
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error?.code;
+
+      const messages: Record<string, string> = {
+        dose_amount_required: "Quantidade obrigatória.",
+        dose_unit_required: "Unidade obrigatória.",
+        strength_required: "Concentração obrigatória.",
+        strength_not_allowed_for_route:
+          "Concentração não permitida para esta via.",
+        procedure_cannot_have_dose:
+          "Procedimento não pode ter dose.",
+      };
+
+      setError(messages[apiError] ?? "Erro ao criar prescrição.");
     } finally {
       setLoading(false);
     }
