@@ -60,7 +60,7 @@ export function useTreatmentScheduleForm() {
 
   const [dosageAmount, setDosageAmount] = useState<number | "">("");
   const [strengthValue, setStrengthValue] = useState<number | "">("");
-  const [strengthUnit, setStrengthUnit] = useState("");
+  const [strengthUnitPublicId, setStrengthUnitPublicId] = useState("");
 
   const [medicationName, setMedicationName] = useState("");
   const [notes, setNotes] = useState("");
@@ -178,8 +178,8 @@ export function useTreatmentScheduleForm() {
 
     strengthValue,
     setStrengthValue,
-    strengthUnit,
-    setStrengthUnit,
+    strengthUnitPublicId,
+    setStrengthUnitPublicId,
 
     medicationName,
     setMedicationName,

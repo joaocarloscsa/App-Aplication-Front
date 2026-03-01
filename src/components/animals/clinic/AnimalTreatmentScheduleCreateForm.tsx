@@ -1,4 +1,3 @@
-// /var/www/GSA/animal/frontend/src/components/animals/clinic/AnimalTreatmentScheduleCreateForm.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -23,12 +22,10 @@ type Props = {
 };
 
 function ymdToUtcStartIso(ymd: string): string {
-  // 2026-02-28 -> 2026-02-28T00:00:00.000Z (sem drift de timezone)
   return `${ymd}T00:00:00.000Z`;
 }
 
 function isoToYmd(iso: string): string {
-  // assume ISO Z; pega apenas YYYY-MM-DD
   return iso.slice(0, 10);
 }
 
@@ -49,6 +46,28 @@ export function AnimalTreatmentScheduleCreateForm({
   const selectedRouteObj = routes.find(
     (r) => r.public_id === form.selectedRoute
   );
+
+useEffect(() => {
+  if (!form.selectedRoute) return;
+  if (!routes.length) return;
+
+  const route = routes.find(
+    (r) => r.public_id === form.selectedRoute
+  );
+
+  if (!route) return;
+
+  const units = route.allowed_units ?? [];
+  const singleUnit = units.length === 1 ? units[0] : null;
+
+  if (singleUnit) {
+    form.setSelectedUnit(singleUnit.public_id);
+
+    if (route.rule.allows_strength) {
+      form.setStrengthUnitPublicId(singleUnit.public_id);
+    }
+  }
+}, [form.selectedRoute, routes]);
 
   async function submit() {
     setError(null);
@@ -76,13 +95,6 @@ export function AnimalTreatmentScheduleCreateForm({
         return;
       }
 
-      if (selectedRouteObj?.rule.requires_strength) {
-        if (!form.strengthValue || !form.strengthUnit) {
-          setError("Concentração e unidade são obrigatórias para esta via.");
-          return;
-        }
-      }
-
       const startsAtIso = ymdToUtcStartIso(form.startsAt);
       const endsAtIso = form.endsAt
         ? ymdToUtcStartIso(isoToYmd(form.endsAt))
@@ -101,7 +113,9 @@ export function AnimalTreatmentScheduleCreateForm({
 
         administration_route_public_id: form.selectedRoute,
 
-        dosage_unit_public_id: isProcedure ? null : form.selectedUnit || null,
+        dosage_unit_public_id: isProcedure
+          ? null
+          : form.selectedUnit || null,
 
         dosage_amount: isProcedure
           ? null
@@ -114,6 +128,10 @@ export function AnimalTreatmentScheduleCreateForm({
           : form.strengthValue === ""
             ? null
             : String(form.strengthValue),
+
+       strength_unit_public_id: isProcedure
+            ? null
+            : form.strengthUnitPublicId || null,
 
         medication_name: form.medicationName || null,
         notes: form.notes || null,
@@ -152,9 +170,10 @@ export function AnimalTreatmentScheduleCreateForm({
       <RecurrenceSection form={form} />
       <PreviewSection form={form} />
 
-      {/* OBSERVAÇÕES */}
       <div>
-        <label className="text-xs text-zinc-600">Observações clínicas</label>
+        <label className="text-xs text-zinc-600">
+          Observações clínicas
+        </label>
         <textarea
           rows={3}
           value={form.notes}

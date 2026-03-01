@@ -1,4 +1,4 @@
-export type CreateTreatmentSchedulePayload = {
+/* export type CreateTreatmentSchedulePayload = {
   frequency_type: "daily_times" | "interval_days";
 
   starts_at: string;
@@ -21,4 +21,4 @@ export type CreateTreatmentSchedulePayload = {
   notes?: string | null;
 
   should_generate_agenda?: boolean;
-};
+}; */
