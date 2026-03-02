@@ -81,6 +81,20 @@ export function TreatmentScheduleStatusActions({
           return;
         }
 
+        if (code === "schedule_has_pending_tasks") {
+          setError(
+            "Você não pode finalizar esta prescrição porque ainda existem doses pendentes. Conclua ou suspenda as tarefas restantes antes de finalizar."
+          );
+          return;
+        }
+
+        if (code === "schedule_has_pending_tasks") {
+          setError(
+            "Não é possível finalizar enquanto houver doses agendadas ainda não concluídas."
+          );
+          return;
+        }
+
         setError("Erro ao alterar estado da prescrição.");
         return;
       }

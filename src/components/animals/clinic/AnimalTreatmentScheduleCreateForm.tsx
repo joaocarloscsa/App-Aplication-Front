@@ -183,6 +183,19 @@ useEffect(() => {
       </div>
 
       <div className="flex justify-end">
+        {form.isRetroactive && (
+  <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+    A data selecionada é retroativa. 
+    As tarefas serão criadas apenas a partir da data e horário atual.
+  </div>
+)}
+
+{form.hasFirstTimeAlreadyPassed && !form.isRetroactive && (
+  <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+    O horário da primeira dose já passou hoje. 
+    A primeira tarefa será criada no próximo ciclo.
+  </div>
+)}
         <button
           type="button"
           onClick={submit}

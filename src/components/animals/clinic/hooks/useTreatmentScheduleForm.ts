@@ -17,19 +17,12 @@ type PreviewCount = {
   endsAtIso: string;
 };
 
-type PreviewUntil = {
-  kind: "until";
-  untilIso: string;
-  dates: string[];
-};
-
 type PreviewUntilMissing = {
   kind: "until_missing";
 };
 
 export type PreviewModel =
   | PreviewCount
-  | PreviewUntil
   | PreviewUntilMissing;
 
 /* ========================= */
@@ -38,10 +31,26 @@ function toLocalIso(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00`).toISOString();
 }
 
-function addDays(base: string, days: number): string {
-  const d = new Date(`${base}T00:00:00`);
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
   d.setDate(d.getDate() + days);
-  return d.toISOString();
+  return d;
+}
+
+function todayStart(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function nowDate(): Date {
+  return new Date();
+}
+
+function combineDateAndTime(date: Date, time: string): Date {
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date(date);
+  d.setHours(h, m, 0, 0);
+  return d;
 }
 
 export function useTreatmentScheduleForm() {
@@ -66,6 +75,50 @@ export function useTreatmentScheduleForm() {
   const [notes, setNotes] = useState("");
 
   /* =========================
+   * Datas base
+   * ========================= */
+
+  const startDateObj = useMemo(() => {
+    if (!startsAt) return null;
+    return new Date(`${startsAt}T00:00:00`);
+  }, [startsAt]);
+
+  const isRetroactive = useMemo(() => {
+    if (!startDateObj) return false;
+    return startDateObj < todayStart();
+  }, [startDateObj]);
+
+  const effectiveStartDate = useMemo(() => {
+    if (!startDateObj) return null;
+
+    const today = todayStart();
+    return startDateObj > today ? startDateObj : today;
+  }, [startDateObj]);
+
+  /* =========================
+   * Horário já passou?
+   * ========================= */
+
+  const hasFirstTimeAlreadyPassed = useMemo(() => {
+    if (!effectiveStartDate) return false;
+
+    const now = nowDate();
+
+    // só importa se for hoje
+    const isToday =
+      effectiveStartDate.getFullYear() === now.getFullYear() &&
+      effectiveStartDate.getMonth() === now.getMonth() &&
+      effectiveStartDate.getDate() === now.getDate();
+
+    if (!isToday) return false;
+
+    const firstTime = times[0] ?? "08:00";
+    const occurrence = combineDateAndTime(effectiveStartDate, firstTime);
+
+    return occurrence < now;
+  }, [effectiveStartDate, times]);
+
+  /* =========================
    * Normalização de horários
    * ========================= */
 
@@ -80,74 +133,77 @@ export function useTreatmentScheduleForm() {
   );
 
   /* =========================
+   * Geração unificada de ocorrências
+   * ========================= */
+
+  const generateOccurrences = (): Date[] => {
+    if (!effectiveStartDate) return [];
+
+    const step = intervalInDays;
+    const occurrences: Date[] = [];
+
+    if (mode === "COUNT") {
+      for (let i = 0; i < count; i++) {
+        occurrences.push(addDays(effectiveStartDate, i * step));
+      }
+      return occurrences;
+    }
+
+    if (!until) return [];
+
+    const untilDate = new Date(`${until}T00:00:00`);
+    let current = new Date(effectiveStartDate);
+
+    while (current <= untilDate) {
+      occurrences.push(new Date(current));
+      current = addDays(current, step);
+    }
+
+    return occurrences;
+  };
+
+  /* =========================
    * EndsAt
    * ========================= */
 
   const endsAt = useMemo<string | null>(() => {
-    if (!startsAt) return null;
-
-    const step = intervalInDays;
-
-    if (mode === "COUNT") {
-      return addDays(startsAt, (count - 1) * step);
-    }
-
-    return until ? toLocalIso(until) : null;
-  }, [startsAt, mode, count, until, intervalInDays]);
+    const occurrences = generateOccurrences();
+    if (occurrences.length === 0) return null;
+    return occurrences[occurrences.length - 1].toISOString();
+  }, [effectiveStartDate, mode, count, until, intervalInDays]);
 
   /* =========================
    * Preview
    * ========================= */
 
   const previewModel = useMemo<PreviewModel>(() => {
-    if (!startsAt) {
+    if (!effectiveStartDate) {
       return { kind: "until_missing" };
     }
 
-    const step = intervalInDays;
+    const occurrences = generateOccurrences();
+    const total = occurrences.length;
 
-    if (mode === "COUNT") {
-      const total = count;
-      const first = Math.min(total, 3);
+    const firstDates = occurrences
+      .slice(0, 3)
+      .map((d) => d.toISOString());
 
-      const firstDates: string[] = Array.from(
-        { length: first },
-        (_, i) => addDays(startsAt, i * step)
-      );
-
-      const lastDate =
-        total > 3 ? addDays(startsAt, (total - 1) * step) : null;
-
-      return {
-        kind: "count",
-        total,
-        firstDates,
-        lastDate,
-        endsAtIso: addDays(startsAt, (total - 1) * step),
-      };
-    }
-
-    if (!until) {
-      return { kind: "until_missing" };
-    }
-
-    const untilIso = toLocalIso(until);
-    const result: string[] = [];
-
-    let current = new Date(`${startsAt}T00:00:00`);
-    const end = new Date(untilIso);
-
-    while (result.length < 5 && current <= end) {
-      result.push(current.toISOString());
-      current.setDate(current.getDate() + step);
-    }
+    const lastDate =
+      total > 3
+        ? occurrences[total - 1].toISOString()
+        : null;
 
     return {
-      kind: "until",
-      untilIso,
-      dates: result,
+      kind: "count",
+      total,
+      firstDates,
+      lastDate,
+      endsAtIso:
+        total > 0
+          ? occurrences[total - 1].toISOString()
+          : effectiveStartDate.toISOString(),
     };
-  }, [startsAt, mode, count, until, intervalInDays]);
+  }, [effectiveStartDate, mode, count, until, intervalInDays]);
 
   return {
     startsAt,
@@ -188,6 +244,8 @@ export function useTreatmentScheduleForm() {
 
     endsAt,
     previewModel,
+    isRetroactive,
+    hasFirstTimeAlreadyPassed,
 
     MAX_COUNT,
   };
