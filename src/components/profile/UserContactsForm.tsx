@@ -1,9 +1,8 @@
-// /var/www/GSA/animal/frontend/src/components/profile/UserContactsForm.tsx
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { http } from "@/services/http";
+import { useModal } from "@/components/ui/modal/ModalProvider";
 
 type Contact = {
   public_id: string;
@@ -34,6 +33,8 @@ function renderType(type: string) {
 }
 
 export function UserContactsForm() {
+  const { confirm } = useModal();
+
   const [items, setItems] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -108,7 +109,14 @@ export function UserContactsForm() {
   }
 
   async function handleDelete(contactPublicId: string) {
-    if (!confirm("Remover este telefone?")) return;
+    const ok = await confirm({
+      title: "Remover telefone?",
+      message: "Tem certeza que deseja remover este telefone?",
+      confirmLabel: "Remover",
+      cancelLabel: "Cancelar",
+    });
+
+    if (!ok) return;
 
     setError(null);
     try {
@@ -143,7 +151,6 @@ export function UserContactsForm() {
         <div className="space-y-4">
           {items.map((c) => (
             <div key={c.public_id} className="rounded-xl border p-4 space-y-3">
-              {/* topo: tipo + created */}
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-zinc-900 truncate">
@@ -165,7 +172,6 @@ export function UserContactsForm() {
                 </button>
               </div>
 
-              {/* corpo */}
               <div className="text-sm font-medium text-zinc-900 break-words">
                 {c.value}
               </div>

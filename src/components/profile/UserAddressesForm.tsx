@@ -1,9 +1,8 @@
-// /var/www/GSA/animal/frontend/src/components/profile/UserAddressesForm.tsx
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { http } from "@/services/http";
+import { useModal } from "@/components/ui/modal/ModalProvider";
 
 type Address = {
   public_id: string;
@@ -31,6 +30,8 @@ function formatDate(d?: string | null) {
 }
 
 export function UserAddressesForm() {
+  const { confirm } = useModal();
+
   const [items, setItems] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -124,7 +125,14 @@ export function UserAddressesForm() {
   }
 
   async function handleDelete(addressPublicId: string) {
-    if (!confirm("Remover este endereço?")) return;
+    const ok = await confirm({
+      title: "Remover endereço?",
+      message: "Tem certeza que deseja remover este endereço?",
+      confirmLabel: "Remover",
+      cancelLabel: "Cancelar",
+    });
+
+    if (!ok) return;
 
     setError(null);
     try {
@@ -192,7 +200,9 @@ export function UserAddressesForm() {
         </div>
       ) : (
         !loading && (
-          <div className="text-sm text-zinc-500">Nenhum endereço cadastrado.</div>
+          <div className="text-sm text-zinc-500">
+            Nenhum endereço cadastrado.
+          </div>
         )
       )}
 

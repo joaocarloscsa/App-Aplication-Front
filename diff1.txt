@@ -1,0 +1,692 @@
+diff --git a/src/app/ClientProviders.tsx b/src/app/ClientProviders.tsx
+index 096c99e..0063b96 100644
+--- a/src/app/ClientProviders.tsx
++++ b/src/app/ClientProviders.tsx
+@@ -1,11 +1,13 @@
+-// /var/www/GSA/animal/frontend/src/app/ClientProviders.tsx
+-
+ "use client";
+ 
+ import { ReactNode } from "react";
+ import { MeProvider } from "@/components/MeContext";
++import { ModalProvider } from "@/components/ui/modal/ModalProvider";
+ 
+ export function ClientProviders({ children }: { children: ReactNode }) {
+-  return <MeProvider>{children}</MeProvider>;
+-}
+-
++  return (
++    <ModalProvider>
++      <MeProvider>{children}</MeProvider>
++    </ModalProvider>
++  );
++}
+\ No newline at end of file
+diff --git a/src/components/agenda/TaskCard.tsx b/src/components/agenda/TaskCard.tsx
+index 9417b6b..0fc56c0 100644
+--- a/src/components/agenda/TaskCard.tsx
++++ b/src/components/agenda/TaskCard.tsx
+@@ -1,3 +1,5 @@
++// /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx
++
+ "use client";
+ 
+ // path: frontend/src/components/agenda/TaskCard.tsx
+@@ -9,6 +11,7 @@ import {
+   statusLabel,
+   TaskStatus,
+ } from "@/utils/task-actions";
++import { useModal } from "@/components/ui/modal/ModalProvider";
+ 
+ type Props = {
+   animalId: string;
+@@ -20,13 +23,6 @@ type Props = {
+   onRefresh?: () => void;
+ };
+ 
+-function askComment(label: string): string | null {
+-  const v = prompt(label);
+-  if (v === null) return null;
+-  const t = v.trim();
+-  return t || null;
+-}
+-
+ function actionLabel(action: string): string {
+   switch (action) {
+     case "completed":
+@@ -46,6 +42,8 @@ export function TaskCard({
+   onAction,
+   onRefresh,
+ }: Props) {
++  const { confirm, prompt } = useModal();
++
+   const status = task.status as TaskStatus;
+   const dueSoon = isDueSoon(task, 12);
+   const rc = task.recurrence_context ?? null;
+@@ -57,6 +55,14 @@ export function TaskCard({
+   const canReopen = status === "DONE";
+   const canCancel = status === "PLANNED";
+ 
++  async function askComment(label: string): Promise<string | null> {
++    const value = await prompt({
++      title: "Comentário",
++      label,
++    });
++    return value;
++  }
++
+   return (
+     <li className="rounded-md border bg-white px-4 py-3 space-y-2">
+       {/* HEADER */}
+@@ -193,7 +199,7 @@ export function TaskCard({
+           {canMarkDone && (
+             <button
+               onClick={async () => {
+-                const c = askComment("Comentário (opcional):");
++                const c = await askComment("Comentário (opcional):");
+                 if (c === null) return;
+                 await onAction("done", c);
+               }}
+@@ -206,7 +212,7 @@ export function TaskCard({
+           {canReopen && (
+             <button
+               onClick={async () => {
+-                const c = askComment("Motivo da reabertura:");
++                const c = await askComment("Motivo da reabertura:");
+                 if (c === null) return;
+                 await onAction("reopen", c);
+               }}
+@@ -219,10 +225,15 @@ export function TaskCard({
+           {canCancel && (
+             <button
+               onClick={async () => {
+-                const ok = confirm("Cancelar esta tarefa?");
++                const ok = await confirm({
++                  title: "Cancelar tarefa?",
++                  message: "Cancelar esta tarefa?",
++                });
+                 if (!ok) return;
+-                const c = askComment("Motivo (opcional):");
++
++                const c = await askComment("Motivo (opcional):");
+                 if (c === null) return;
++
+                 await onAction("cancel", c);
+               }}
+               className="text-xs px-3 py-1.5 rounded-md border border-red-300 text-red-700 hover:bg-red-50"
+@@ -234,4 +245,4 @@ export function TaskCard({
+       </div>
+     </li>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/src/components/animals/AnimalHeader.tsx b/src/components/animals/AnimalHeader.tsx
+index 9128865..c10a216 100644
+--- a/src/components/animals/AnimalHeader.tsx
++++ b/src/components/animals/AnimalHeader.tsx
+@@ -4,15 +4,17 @@ import { useState } from "react";
+ import { CopyId } from "@/components/dashboard/CopyId";
+ import { AnimalPhotoBlock } from "@/components/animals/AnimalPhotoBlock";
+ import { inviteTutorToAnimal } from "@/services/animalInvites";
++import { useModal } from "@/components/ui/modal/ModalProvider";
+ 
+ type Props = {
+   animal: any;
+   onRevokeTutor?: (personPublicId: string) => void;
+-  onReload?: () => Promise<void> | void; // 🔹 importante para refletir o convite
++  onReload?: () => Promise<void> | void;
+ };
+ 
+ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+-  // 🔹 estado do convite
++const { confirm } = useModal();
++
+   const [inviteOpen, setInviteOpen] = useState(false);
+   const [invitePersonId, setInvitePersonId] = useState("");
+   const [sendingInvite, setSendingInvite] = useState(false);
+@@ -36,11 +38,23 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+       }
+     } catch (err: any) {
+       const code = err?.body?.error?.code;
++
+       if (code === "person_already_tutor") {
+-        alert("Esta pessoa já é tutora deste animal.");
++await confirm({
++  title: "Convite inválido",
++  message: "Esta pessoa já é tutora deste animal.",
++  confirmLabel: "OK",
++  hideCancel: true,
++});
+         return;
+       }
+-      alert("Erro ao enviar convite.");
++
++await confirm({
++  title: "Erro",
++  message: "Erro ao enviar convite.",
++  confirmLabel: "OK",
++  hideCancel: true,
++});
+     } finally {
+       setSendingInvite(false);
+     }
+@@ -48,7 +62,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+ 
+   return (
+     <header className="space-y-6">
+-      {/* IDENTIDADE */}
+       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8">
+         <AnimalPhotoBlock
+           animalPublicId={animal.public_id}
+@@ -70,11 +83,11 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+           </div>
+ 
+           <div className="flex items-center gap-2 text-sm text-zinc-600">
+-            <span className="font-mono"><CopyId id={animal.public_id} /></span>
+-            
++            <span className="font-mono">
++              <CopyId id={animal.public_id} />
++            </span>
+           </div>
+ 
+-          {/* ✅ convite só para tutor principal (via permissão do backend) */}
+           {animal.permissions?.invite && (
+             <button
+               type="button"
+@@ -87,7 +100,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+         </div>
+       </div>
+ 
+-      {/* TUTORES */}
+       <section className="space-y-3">
+         <h2 className="text-sm font-semibold text-zinc-900">
+           Tutores deste animal
+@@ -103,7 +115,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+               <span className="text-xs font-mono text-zinc-500">
+                 <CopyId id={animal.tutors.primary.person_public_id} />
+               </span>
+-              
+             </div>
+           </div>
+         )}
+@@ -129,7 +140,9 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+ 
+                 {animal.permissions?.edit && onRevokeTutor && (
+                   <button
+-                    onClick={() => onRevokeTutor(t.person_public_id)}
++                    onClick={() =>
++                      onRevokeTutor(t.person_public_id)
++                    }
+                     className="text-xs text-red-600 hover:underline"
+                   >
+                     Remover acesso
+@@ -141,7 +154,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+         )}
+       </section>
+ 
+-      {/* MODAL — CONVIDAR TUTOR */}
+       {inviteOpen && (
+         <div
+           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+@@ -159,7 +171,9 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
+               type="text"
+               placeholder="ID público do tutor (PER_...)"
+               value={invitePersonId}
+-              onChange={(e) => setInvitePersonId(e.target.value)}
++              onChange={(e) =>
++                setInvitePersonId(e.target.value)
++              }
+               className="w-full rounded border px-3 py-2 text-sm"
+             />
+ 
+diff --git a/src/components/profile/UserAddressesForm.tsx b/src/components/profile/UserAddressesForm.tsx
+index f6b0b0b..a7cdd4d 100644
+--- a/src/components/profile/UserAddressesForm.tsx
++++ b/src/components/profile/UserAddressesForm.tsx
+@@ -1,9 +1,8 @@
+-// /var/www/GSA/animal/frontend/src/components/profile/UserAddressesForm.tsx
+-
+ "use client";
+ 
+ import { useCallback, useEffect, useState } from "react";
+ import { http } from "@/services/http";
++import { useModal } from "@/components/ui/modal/ModalProvider";
+ 
+ type Address = {
+   public_id: string;
+@@ -31,6 +30,8 @@ function formatDate(d?: string | null) {
+ }
+ 
+ export function UserAddressesForm() {
++  const { confirm } = useModal();
++
+   const [items, setItems] = useState<Address[]>([]);
+   const [loading, setLoading] = useState(true);
+ 
+@@ -124,7 +125,14 @@ export function UserAddressesForm() {
+   }
+ 
+   async function handleDelete(addressPublicId: string) {
+-    if (!confirm("Remover este endereço?")) return;
++    const ok = await confirm({
++      title: "Remover endereço?",
++      message: "Tem certeza que deseja remover este endereço?",
++      confirmLabel: "Remover",
++      cancelLabel: "Cancelar",
++    });
++
++    if (!ok) return;
+ 
+     setError(null);
+     try {
+@@ -192,7 +200,9 @@ export function UserAddressesForm() {
+         </div>
+       ) : (
+         !loading && (
+-          <div className="text-sm text-zinc-500">Nenhum endereço cadastrado.</div>
++          <div className="text-sm text-zinc-500">
++            Nenhum endereço cadastrado.
++          </div>
+         )
+       )}
+ 
+@@ -308,4 +318,4 @@ export function UserAddressesForm() {
+       </div>
+     </div>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/src/components/profile/UserContactsForm.tsx b/src/components/profile/UserContactsForm.tsx
+index 7686dd0..69260a0 100644
+--- a/src/components/profile/UserContactsForm.tsx
++++ b/src/components/profile/UserContactsForm.tsx
+@@ -1,9 +1,8 @@
+-// /var/www/GSA/animal/frontend/src/components/profile/UserContactsForm.tsx
+-
+ "use client";
+ 
+ import { useCallback, useEffect, useState } from "react";
+ import { http } from "@/services/http";
++import { useModal } from "@/components/ui/modal/ModalProvider";
+ 
+ type Contact = {
+   public_id: string;
+@@ -34,6 +33,8 @@ function renderType(type: string) {
+ }
+ 
+ export function UserContactsForm() {
++  const { confirm } = useModal();
++
+   const [items, setItems] = useState<Contact[]>([]);
+   const [loading, setLoading] = useState(true);
+ 
+@@ -108,7 +109,14 @@ export function UserContactsForm() {
+   }
+ 
+   async function handleDelete(contactPublicId: string) {
+-    if (!confirm("Remover este telefone?")) return;
++    const ok = await confirm({
++      title: "Remover telefone?",
++      message: "Tem certeza que deseja remover este telefone?",
++      confirmLabel: "Remover",
++      cancelLabel: "Cancelar",
++    });
++
++    if (!ok) return;
+ 
+     setError(null);
+     try {
+@@ -143,7 +151,6 @@ export function UserContactsForm() {
+         <div className="space-y-4">
+           {items.map((c) => (
+             <div key={c.public_id} className="rounded-xl border p-4 space-y-3">
+-              {/* topo: tipo + created */}
+               <div className="flex items-start justify-between gap-3">
+                 <div className="min-w-0">
+                   <div className="text-sm font-semibold text-zinc-900 truncate">
+@@ -165,7 +172,6 @@ export function UserContactsForm() {
+                 </button>
+               </div>
+ 
+-              {/* corpo */}
+               <div className="text-sm font-medium text-zinc-900 break-words">
+                 {c.value}
+               </div>
+@@ -249,4 +255,4 @@ export function UserContactsForm() {
+       </div>
+     </div>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/src/components/ui/modal/ModalProvider.tsx b/src/components/ui/modal/ModalProvider.tsx
+new file mode 100644
+index 0000000..eff83b6
+--- /dev/null
++++ b/src/components/ui/modal/ModalProvider.tsx
+@@ -0,0 +1,245 @@
++"use client";
++
++import {
++  createContext,
++  useContext,
++  useState,
++  ReactNode,
++  useCallback,
++} from "react";
++import { createPortal } from "react-dom";
++
++type ConfirmOptions = {
++  title: string;
++  message: string;
++  confirmLabel?: string;
++  cancelLabel?: string;
++  hideCancel?: boolean;
++  variant?: "default" | "danger";
++};
++
++type PromptOptions = {
++  title?: string;
++  label: string;
++  defaultValue?: string;
++  confirmLabel?: string;
++  cancelLabel?: string;
++};
++
++type ModalState =
++  | {
++    type: "confirm";
++    options: ConfirmOptions;
++    resolve: (value: boolean) => void;
++  }
++  | {
++    type: "prompt";
++    options: PromptOptions;
++    resolve: (value: string | null) => void;
++  }
++  | null;
++
++type ModalContextType = {
++  confirm: (options: ConfirmOptions) => Promise<boolean>;
++  prompt: (options: PromptOptions) => Promise<string | null>;
++};
++
++const ModalContext = createContext<ModalContextType | null>(null);
++
++export function ModalProvider({ children }: { children: ReactNode }) {
++  const [modal, setModal] = useState<ModalState>(null);
++
++  const close = () => {
++    setModal(null);
++    document.body.style.overflow = "";
++  };
++
++  const confirm = useCallback(
++    (options: ConfirmOptions) => {
++      if (modal) {
++        return Promise.resolve(false);
++      }
++
++      document.body.style.overflow = "hidden";
++
++      return new Promise<boolean>((resolve) => {
++        setModal({
++          type: "confirm",
++          options,
++          resolve,
++        });
++      });
++    },
++    [modal]
++  );
++
++  const prompt = useCallback(
++    (options: PromptOptions) => {
++      if (modal) {
++        return Promise.resolve(null);
++      }
++
++      document.body.style.overflow = "hidden";
++
++      return new Promise<string | null>((resolve) => {
++        setModal({
++          type: "prompt",
++          options,
++          resolve,
++        });
++      });
++    },
++    [modal]
++  );
++
++  return (
++    <ModalContext.Provider value={{ confirm, prompt }}>
++      {children}
++      {modal && createPortal(
++        <ModalRenderer modal={modal} onClose={close} />,
++        document.body
++      )}
++    </ModalContext.Provider>
++  );
++}
++
++function ModalRenderer({
++  modal,
++  onClose,
++}: {
++  modal: NonNullable<ModalState>;
++  onClose: () => void;
++}) {
++  if (modal.type === "confirm") {
++    const { options, resolve } = modal;
++
++    const confirmLabel = options.confirmLabel ?? "Confirmar";
++    const cancelLabel = options.cancelLabel ?? "Cancelar";
++    const hideCancel = options.hideCancel ?? false;
++    const variant = options.variant ?? "default";
++
++    const confirmButtonClass =
++      variant === "danger"
++        ? "px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
++        : "px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-sm rounded";
++
++    return (
++      <BaseModal
++        onClose={() => {
++          resolve(false);
++          onClose();
++        }}
++      >
++        <h3 className="text-lg font-semibold">
++          {options.title ?? "Confirmação"}
++        </h3>
++
++        <p className="text-sm text-zinc-700 whitespace-pre-line">
++          {options.message}
++        </p>
++
++        <div className="flex justify-end gap-3 pt-4">
++          {!hideCancel && (
++            <button
++              onClick={() => {
++                resolve(false);
++                onClose();
++              }}
++              className="px-4 py-2 text-sm"
++            >
++              {cancelLabel}
++            </button>
++          )}
++
++          <button
++            onClick={() => {
++              resolve(true);
++              onClose();
++            }}
++            className={confirmButtonClass}
++          >
++            {confirmLabel}
++          </button>
++        </div>
++      </BaseModal>
++    );
++  }
++
++  if (modal.type === "prompt") {
++    const { options, resolve } = modal;
++    const [value, setValue] = useState(options.defaultValue ?? "");
++
++    return (
++      <BaseModal onClose={() => { resolve(null); onClose(); }}>
++        <h3 className="text-lg font-semibold">
++          {options.title ?? "Entrada"}
++        </h3>
++
++        <label className="text-sm text-zinc-700">
++          {options.label}
++        </label>
++
++        <input
++          autoFocus
++          value={value}
++          onChange={(e) => setValue(e.target.value)}
++          className="w-full border rounded px-3 py-2 text-sm"
++        />
++
++        <div className="flex justify-end gap-3 pt-4">
++          <button
++            onClick={() => {
++              resolve(null);
++              onClose();
++            }}
++            className="px-4 py-2 text-sm"
++          >
++            {options.cancelLabel ?? "Cancelar"}
++          </button>
++
++          <button
++            onClick={() => {
++              resolve(value.trim() || null);
++              onClose();
++            }}
++            className="px-4 py-2 bg-zinc-900 text-white text-sm rounded"
++          >
++            {options.confirmLabel ?? "Confirmar"}
++          </button>
++        </div>
++      </BaseModal>
++    );
++  }
++
++  return null;
++}
++
++function BaseModal({
++  children,
++  onClose,
++}: {
++  children: ReactNode;
++  onClose: () => void;
++}) {
++  return (
++    <div
++      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
++      onClick={onClose}
++    >
++      <div
++        className="w-full max-w-md rounded-xl bg-white p-6 space-y-4"
++        onClick={(e) => e.stopPropagation()}
++      >
++        {children}
++      </div>
++    </div>
++  );
++}
++
++export function useModal() {
++  const ctx = useContext(ModalContext);
++  if (!ctx) {
++    throw new Error("useModal must be used within ModalProvider");
++  }
++  return ctx;
++}
+diff --git a/src/hooks/useTaskActions.ts b/src/hooks/useTaskActions.ts
+index ee947aa..a6dc025 100644
+--- a/src/hooks/useTaskActions.ts
++++ b/src/hooks/useTaskActions.ts
+@@ -1,7 +1,6 @@
+ "use client";
+ 
+-// path: frontend/src/hooks/useTaskActions.ts
+-
++import { useModal } from "@/components/ui/modal/ModalProvider";
+ import {
+   markTaskDone,
+   reopenTask,
+@@ -14,14 +13,17 @@ export function useTaskActions(
+   taskId: number,
+   onReload: () => Promise<void>
+ ) {
++  const { confirm, prompt } = useModal();
++
+   async function askComment(
+     label = "Comentário (opcional):"
+   ): Promise<string | null> {
+-    const v = prompt(label);
+-    if (v === null) return null;
++    const value = await prompt({
++      title: "Comentário",
++      label,
++    });
+ 
+-    const t = v.trim();
+-    return t || null;
++    return value;
+   }
+ 
+   async function done() {
+@@ -33,10 +35,14 @@ export function useTaskActions(
+   }
+ 
+   async function cancel() {
+-    const ok = confirm("Cancelar esta tarefa?");
++    const ok = await confirm({
++      title: "Cancelar tarefa?",
++      message: "Tem certeza que deseja cancelar esta tarefa?",
++    });
++
+     if (!ok) return;
+ 
+-    const c = await askComment();
++    const c = await askComment("Motivo (opcional):");
+     if (c === null) return;
+ 
+     await cancelTask(animalId, taskId, c);
+@@ -52,12 +58,12 @@ export function useTaskActions(
+   }
+ 
+   async function cancelRecurrence() {
+-    const ok = confirm(
+-      "Cancelar toda a recorrência?\n\n" +
+-        "As ocorrências futuras que ainda não foram concluídas " +
+-        "serão canceladas.\n\n" +
+-        "As ocorrências já concluídas serão mantidas."
+-    );
++    const ok = await confirm({
++      title: "Cancelar recorrência?",
++      message:
++        "As ocorrências futuras que ainda não foram concluídas serão canceladas.\n\n" +
++        "As ocorrências já concluídas serão mantidas.",
++    });
+ 
+     if (!ok) return;
+ 
+@@ -77,4 +83,4 @@ export function useTaskActions(
+     reopen,
+     cancelRecurrence,
+   };
+-}
++}
+\ No newline at end of file

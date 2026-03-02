@@ -4,15 +4,17 @@ import { useState } from "react";
 import { CopyId } from "@/components/dashboard/CopyId";
 import { AnimalPhotoBlock } from "@/components/animals/AnimalPhotoBlock";
 import { inviteTutorToAnimal } from "@/services/animalInvites";
+import { useModal } from "@/components/ui/modal/ModalProvider";
 
 type Props = {
   animal: any;
   onRevokeTutor?: (personPublicId: string) => void;
-  onReload?: () => Promise<void> | void; // 🔹 importante para refletir o convite
+  onReload?: () => Promise<void> | void;
 };
 
 export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
-  // 🔹 estado do convite
+const { confirm } = useModal();
+
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitePersonId, setInvitePersonId] = useState("");
   const [sendingInvite, setSendingInvite] = useState(false);
@@ -36,11 +38,23 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
       }
     } catch (err: any) {
       const code = err?.body?.error?.code;
+
       if (code === "person_already_tutor") {
-        alert("Esta pessoa já é tutora deste animal.");
+await confirm({
+  title: "Convite inválido",
+  message: "Esta pessoa já é tutora deste animal.",
+  confirmLabel: "OK",
+  hideCancel: true,
+});
         return;
       }
-      alert("Erro ao enviar convite.");
+
+await confirm({
+  title: "Erro",
+  message: "Erro ao enviar convite.",
+  confirmLabel: "OK",
+  hideCancel: true,
+});
     } finally {
       setSendingInvite(false);
     }
@@ -48,7 +62,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
 
   return (
     <header className="space-y-6">
-      {/* IDENTIDADE */}
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8">
         <AnimalPhotoBlock
           animalPublicId={animal.public_id}
@@ -70,11 +83,11 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
           </div>
 
           <div className="flex items-center gap-2 text-sm text-zinc-600">
-            <span className="font-mono"><CopyId id={animal.public_id} /></span>
-            
+            <span className="font-mono">
+              <CopyId id={animal.public_id} />
+            </span>
           </div>
 
-          {/* ✅ convite só para tutor principal (via permissão do backend) */}
           {animal.permissions?.invite && (
             <button
               type="button"
@@ -87,7 +100,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
         </div>
       </div>
 
-      {/* TUTORES */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-zinc-900">
           Tutores deste animal
@@ -103,7 +115,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
               <span className="text-xs font-mono text-zinc-500">
                 <CopyId id={animal.tutors.primary.person_public_id} />
               </span>
-              
             </div>
           </div>
         )}
@@ -129,7 +140,9 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
 
                 {animal.permissions?.edit && onRevokeTutor && (
                   <button
-                    onClick={() => onRevokeTutor(t.person_public_id)}
+                    onClick={() =>
+                      onRevokeTutor(t.person_public_id)
+                    }
                     className="text-xs text-red-600 hover:underline"
                   >
                     Remover acesso
@@ -141,7 +154,6 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
         )}
       </section>
 
-      {/* MODAL — CONVIDAR TUTOR */}
       {inviteOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
@@ -159,7 +171,9 @@ export function AnimalHeader({ animal, onRevokeTutor, onReload }: Props) {
               type="text"
               placeholder="ID público do tutor (PER_...)"
               value={invitePersonId}
-              onChange={(e) => setInvitePersonId(e.target.value)}
+              onChange={(e) =>
+                setInvitePersonId(e.target.value)
+              }
               className="w-full rounded border px-3 py-2 text-sm"
             />
 

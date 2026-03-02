@@ -1,3 +1,5 @@
+// /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx
+
 "use client";
 
 // path: frontend/src/components/agenda/TaskCard.tsx
@@ -9,6 +11,7 @@ import {
   statusLabel,
   TaskStatus,
 } from "@/utils/task-actions";
+import { useModal } from "@/components/ui/modal/ModalProvider";
 
 type Props = {
   animalId: string;
@@ -19,13 +22,6 @@ type Props = {
   ): Promise<void>;
   onRefresh?: () => void;
 };
-
-function askComment(label: string): string | null {
-  const v = prompt(label);
-  if (v === null) return null;
-  const t = v.trim();
-  return t || null;
-}
 
 function actionLabel(action: string): string {
   switch (action) {
@@ -46,6 +42,8 @@ export function TaskCard({
   onAction,
   onRefresh,
 }: Props) {
+  const { confirm, prompt } = useModal();
+
   const status = task.status as TaskStatus;
   const dueSoon = isDueSoon(task, 12);
   const rc = task.recurrence_context ?? null;
@@ -56,6 +54,14 @@ export function TaskCard({
   const canMarkDone = status === "PLANNED";
   const canReopen = status === "DONE";
   const canCancel = status === "PLANNED";
+
+  async function askComment(label: string): Promise<string | null> {
+    const value = await prompt({
+      title: "Comentário",
+      label,
+    });
+    return value;
+  }
 
   return (
     <li className="rounded-md border bg-white px-4 py-3 space-y-2">
@@ -193,7 +199,7 @@ export function TaskCard({
           {canMarkDone && (
             <button
               onClick={async () => {
-                const c = askComment("Comentário (opcional):");
+                const c = await askComment("Comentário (opcional):");
                 if (c === null) return;
                 await onAction("done", c);
               }}
@@ -206,7 +212,7 @@ export function TaskCard({
           {canReopen && (
             <button
               onClick={async () => {
-                const c = askComment("Motivo da reabertura:");
+                const c = await askComment("Motivo da reabertura:");
                 if (c === null) return;
                 await onAction("reopen", c);
               }}
@@ -219,10 +225,15 @@ export function TaskCard({
           {canCancel && (
             <button
               onClick={async () => {
-                const ok = confirm("Cancelar esta tarefa?");
+                const ok = await confirm({
+                  title: "Cancelar tarefa?",
+                  message: "Cancelar esta tarefa?",
+                });
                 if (!ok) return;
-                const c = askComment("Motivo (opcional):");
+
+                const c = await askComment("Motivo (opcional):");
                 if (c === null) return;
+
                 await onAction("cancel", c);
               }}
               className="text-xs px-3 py-1.5 rounded-md border border-red-300 text-red-700 hover:bg-red-50"
