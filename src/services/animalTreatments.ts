@@ -53,6 +53,17 @@ export type TreatmentScheduleDTO = {
     ends_at?: string | null;
   };
 
+  task_stats?: {
+    total: number;
+    done: number;
+    suspended: number;
+    planned: number;
+    not_done: number;
+    canceled: number;
+    cancelled: number;
+    remaining: number;
+  } | null;
+
   meta: {
     created_at: string;
     status: string;
@@ -67,6 +78,8 @@ export type TreatmentScheduleDTO = {
   notes?: string | null;
   status_history?: any[];
 };
+
+
 
 export type TreatmentDTO = {
   treatment_id: number;

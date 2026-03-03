@@ -211,6 +211,60 @@ export function TreatmentSchedulesSection({
               {s.period?.ends_at && ` • Fim: ${formatDateSafe(s.period.ends_at)}`}
             </p>
 
+{s.task_stats && (
+  <div className="text-xs border-t pt-2 space-y-1">
+    <div className="flex gap-4 flex-wrap">
+      <span>
+        Total:{" "}
+        <span className="font-medium">
+          {s.task_stats.total}
+        </span>
+      </span>
+
+      <span className="text-green-700">
+        Administradas:{" "}
+        <span className="font-medium">
+          {s.task_stats.done}
+        </span>
+      </span>
+
+      <span className="text-yellow-700">
+        Suspensas:{" "}
+        <span className="font-medium">
+          {s.task_stats.suspended}
+        </span>
+      </span>
+
+      {s.task_stats.canceled > 0 && (
+        <span className="text-red-700">
+          Canceladas:{" "}
+          <span className="font-medium">
+            {s.task_stats.canceled}
+          </span>
+        </span>
+      )}
+
+      <span className="text-blue-700">
+        Restantes:{" "}
+        <span className="font-medium">
+          {s.task_stats.remaining}
+        </span>
+      </span>
+    </div>
+
+    {s.task_stats.total > 0 && (
+      <div className="w-full bg-zinc-200 rounded h-1.5 mt-1">
+        <div
+          className="bg-green-600 h-1.5 rounded"
+          style={{
+            width: `${(s.task_stats.done / s.task_stats.total) * 100}%`,
+          }}
+        />
+      </div>
+    )}
+  </div>
+)}
+
             {/* OBSERVAÇÕES */}
             {s.notes && (
               <div className="text-xs text-zinc-600 italic border-t pt-2">
