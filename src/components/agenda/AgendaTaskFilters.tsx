@@ -1,4 +1,10 @@
+// path: frontend/src/components/agenda/AgendaTaskFilters.tsx
+
 "use client";
+
+import { useMemo } from "react";
+import type { TreatmentDTO } from "@/services/animalTreatments";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
 
@@ -14,6 +20,10 @@ type Props = {
 
   status: TaskStatusFilter;
 
+  treatments: TreatmentDTO[];
+  selectedTreatment?: string;
+  selectedSchedule?: string;
+
   onToggleToday(value: boolean): void;
   onToggleExpanded(): void;
 
@@ -24,6 +34,9 @@ type Props = {
   onChangeTo(value: string): void;
 
   onChangeStatus(status: TaskStatusFilter): void;
+
+  onChangeTreatment(value?: string): void;
+  onChangeSchedule(value?: string): void;
 };
 
 const months = [
@@ -39,6 +52,9 @@ export function AgendaTaskFilters({
   from,
   to,
   status,
+  treatments,
+  selectedTreatment,
+  selectedSchedule,
   onToggleToday,
   onToggleExpanded,
   onChangeYear,
@@ -46,13 +62,47 @@ export function AgendaTaskFilters({
   onChangeFrom,
   onChangeTo,
   onChangeStatus,
+  onChangeTreatment,
+  onChangeSchedule,
 }: Props) {
   const currentYear = new Date().getFullYear();
 
+  const selectedTreatmentObj = useMemo(
+    () =>
+      treatments.find(
+        (t) => t.treatment_public_id === selectedTreatment
+      ),
+    [treatments, selectedTreatment]
+  );
+
+  const treatmentOptions = useMemo(() => {
+    return [
+      { value: "", label: "Todos tratamentos" },
+      ...treatments.map((t) => ({
+        value: t.treatment_public_id,
+        label: `${t.name} — ${t.treatment_public_id}`,
+      })),
+    ];
+  }, [treatments]);
+
+  const scheduleOptions = useMemo(() => {
+    if (!selectedTreatmentObj) return [];
+
+    return [
+      { value: "", label: "Todas medicações" },
+      ...selectedTreatmentObj.schedules.map((s) => ({
+        value: s.schedule_public_id,
+        label: `${s.medication_name ?? "Sem nome"} — ${s.schedule_public_id}`,
+      })),
+    ];
+  }, [selectedTreatmentObj]);
+
   return (
-    <div className="space-y-3 border rounded-md p-3 bg-zinc-50">
-      {/* Linha principal */}
-      <div className="flex flex-wrap gap-4 items-end">
+    <div className="space-y-4 border rounded-md p-4 bg-zinc-50">
+
+      {/* LINHA 1 — CONTROLES PRINCIPAIS */}
+      <div className="flex flex-wrap items-end gap-4">
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -100,32 +150,51 @@ export function AgendaTaskFilters({
           <option value="ALL">Todas</option>
         </select>
 
+        <SearchableSelect
+          value={selectedTreatment}
+          options={treatmentOptions}
+          placeholder="Selecionar tratamento"
+          onChange={(v) => onChangeTreatment(v)}
+          className="min-w-[260px]"
+        />
+
+        {selectedTreatmentObj && (
+          <SearchableSelect
+            value={selectedSchedule}
+            options={scheduleOptions}
+            placeholder="Selecionar medicação"
+            onChange={(v) => onChangeSchedule(v)}
+            className="min-w-[260px]"
+          />
+        )}
+
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="text-xs text-blue-700 underline"
+          className="text-xs text-blue-700 underline ml-auto"
         >
           Filtro avançado
         </button>
       </div>
 
-      {/* Avançado */}
+      {/* LINHA 2 — AVANÇADO */}
       {expanded && (
-        <div className="flex gap-3 text-sm">
+        <div className="flex gap-4">
           <input
             type="date"
             value={from ?? ""}
             onChange={(e) => onChangeFrom(e.target.value)}
-            className="border rounded px-2 py-1"
+            className="border rounded px-2 py-1 text-sm"
           />
           <input
             type="date"
             value={to ?? ""}
             onChange={(e) => onChangeTo(e.target.value)}
-            className="border rounded px-2 py-1"
+            className="border rounded px-2 py-1 text-sm"
           />
         </div>
       )}
+
     </div>
   );
 }

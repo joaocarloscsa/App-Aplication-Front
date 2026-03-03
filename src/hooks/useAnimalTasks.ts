@@ -19,6 +19,10 @@ export type TaskFiltersState = {
   to?: string;
 
   status: TaskStatusFilter;
+
+
+  treatmentPublicId?: string;
+  treatmentSchedulePublicId?: string;
 };
 
 function resolveDateRange(
@@ -59,15 +63,17 @@ export function useAnimalTasks(animalId: string | undefined) {
   const [tasks, setTasks] = useState<AnimalTaskItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [filters, setFilters] = useState<TaskFiltersState>({
-    todayOnly: false,
-    expanded: false,
-    year: now.getFullYear(),
-    month: now.getMonth() + 1,
-    from: undefined,
-    to: undefined,
-    status: "PLANNED",
-  });
+const [filters, setFilters] = useState<TaskFiltersState>({
+  todayOnly: false,
+  expanded: false,
+  year: now.getFullYear(),
+  month: now.getMonth() + 1,
+  from: undefined,
+  to: undefined,
+  status: "PLANNED",
+  treatmentPublicId: undefined,
+  treatmentSchedulePublicId: undefined,
+});
 
   const reload = useCallback(async () => {
     if (!animalId) return;
@@ -83,10 +89,12 @@ export function useAnimalTasks(animalId: string | undefined) {
     const backendStatus =
       filters.status === "LATE" ? "PLANNED" : filters.status;
 
-    const res = await getAnimalTasks(animalId, {
-      ...range,
-      status: backendStatus === "ALL" ? undefined : backendStatus,
-    });
+const res = await getAnimalTasks(animalId, {
+  ...range,
+  status: backendStatus === "ALL" ? undefined : backendStatus,
+  treatment_public_id: filters.treatmentPublicId,
+  treatment_schedule_public_id: filters.treatmentSchedulePublicId,
+});
 
     const items =
       filters.status === "LATE"
@@ -107,6 +115,8 @@ export function useAnimalTasks(animalId: string | undefined) {
     filters.from,
     filters.to,
     filters.status,
+    filters.treatmentPublicId,
+    filters.treatmentSchedulePublicId,
   ]);
 
   useEffect(() => {

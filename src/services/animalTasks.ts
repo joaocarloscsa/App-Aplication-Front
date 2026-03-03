@@ -11,12 +11,19 @@ export async function getAnimalTasks(
     from?: string;
     to?: string;
     status?: string;
+    treatment_public_id?: string;
+    treatment_schedule_public_id?: string;
   }
 ): Promise<AnimalTaskListResponse> {
   const qs = new URLSearchParams();
+
   if (params?.from) qs.set("from", params.from);
   if (params?.to) qs.set("to", params.to);
   if (params?.status) qs.set("status", params.status);
+  if (params?.treatment_public_id)
+    qs.set("treatment_public_id", params.treatment_public_id);
+  if (params?.treatment_schedule_public_id)
+    qs.set("treatment_schedule_public_id", params.treatment_schedule_public_id);
 
   const query = qs.toString();
   const url = `/api/v1/animals/${animalId}/tasks${query ? `?${query}` : ""}`;

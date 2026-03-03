@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import type { AnimalTaskItem } from "@/types/agenda";
@@ -13,6 +13,9 @@ import { AnimalTaskItemCard } from "@/components/agenda/AnimalTaskItemCard";
 
 import { useAnimalTasks } from "@/hooks/useAnimalTasks";
 
+import { fetchAnimalTreatments } from "@/services/animalTreatments";
+import type { TreatmentDTO } from "@/services/animalTreatments";
+
 export default function AnimalAgendaTasksPage() {
   const { animalId } = useParams<{ animalId: string }>();
 
@@ -20,6 +23,15 @@ export default function AnimalAgendaTasksPage() {
     useAnimalTasks(animalId);
 
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [treatments, setTreatments] = useState<TreatmentDTO[]>([]);
+
+  useEffect(() => {
+    if (!animalId) return;
+
+    fetchAnimalTreatments(animalId)
+      .then(setTreatments)
+      .catch(() => setTreatments([]));
+  }, [animalId]);
 
   if (loading) {
     return <p className="text-sm text-zinc-500">Carregando tarefas…</p>;
@@ -37,6 +49,9 @@ export default function AnimalAgendaTasksPage() {
         from={filters.from}
         to={filters.to}
         status={filters.status}
+        treatments={treatments}
+        selectedTreatment={filters.treatmentPublicId}
+        selectedSchedule={filters.treatmentSchedulePublicId}
         onToggleToday={(v) =>
           setFilters((s) => ({ ...s, todayOnly: v }))
         }
@@ -48,6 +63,19 @@ export default function AnimalAgendaTasksPage() {
         onChangeFrom={(v) => setFilters((s) => ({ ...s, from: v }))}
         onChangeTo={(v) => setFilters((s) => ({ ...s, to: v }))}
         onChangeStatus={(v) => setFilters((s) => ({ ...s, status: v }))}
+        onChangeTreatment={(v) =>
+          setFilters((s) => ({
+            ...s,
+            treatmentPublicId: v,
+            treatmentSchedulePublicId: undefined,
+          }))
+        }
+        onChangeSchedule={(v) =>
+          setFilters((s) => ({
+            ...s,
+            treatmentSchedulePublicId: v,
+          }))
+        }
       />
 
       <ul className="space-y-3">
