@@ -43,36 +43,31 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
     return <div className="p-6 text-zinc-500">Carregando animal…</div>;
   }
 
-  const menuItems = [
-    {
-      label: "Consultas",
-      href: `${clinicBase}/consultations`,
-    },
-    {
-      label: "Exames",
-      href: `${clinicBase}/exams`,
-    },
-    {
-      label: "Pedidos",
-      href: `${clinicBase}/orders`,
-    },
-    {
-      label: "Internações",
-      href: `${clinicBase}/hospitalizations`,
-    },
-    {
-      label: "Medicações",
-      href: `${clinicBase}/medications`,
-    },
-    {
-      label: "Tratamentos",
-      href: `${clinicBase}/treatments`,
-    },
-  ];
+const menuItems = [
+  {
+    label: "Consultas",
+    href: `${clinicBase}/consultations`,
+  },
+  {
+    label: "Pedidos",
+    href: `${clinicBase}/orders`,
+  },
+  {
+    label: "Exames",
+    href: `${clinicBase}/exams`,
+  },
+  {
+    label: "Medicações",
+    href: `${clinicBase}/medications`,
+  },
+  {
+    label: "Tratamentos",
+    href: `${clinicBase}/treatments`,
+  },
+];
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-6 space-y-10">
-      {/* HEADER DO ANIMAL */}
       <AnimalHeader
         animal={animal}
         onRevokeTutor={async (personId) => {
@@ -81,10 +76,8 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
         }}
       />
 
-      {/* MENU PRINCIPAL DO ANIMAL */}
       <AnimalSectionMenu animalId={animal.public_id} />
 
-      {/* SUBMENU DA CLÍNICA */}
       <nav className="border-b border-zinc-200">
         <ul className="flex gap-6 text-sm">
           {menuItems.map((item) => {
@@ -110,7 +103,6 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
         </ul>
       </nav>
 
-      {/* CONTEÚDO DA PÁGINA */}
       {children}
     </section>
   );

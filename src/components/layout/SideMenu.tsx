@@ -13,7 +13,15 @@ type SideMenuProps = {
 export function SideMenu({ mobile = false }: SideMenuProps) {
   const pathname = usePathname();
   const params = useParams();
-  const animalId = params?.animalId as string | undefined;
+
+  // normaliza param (Next pode retornar string | string[])
+  const rawAnimalId = params?.animalId;
+  const animalId =
+    typeof rawAnimalId === "string"
+      ? rawAnimalId
+      : Array.isArray(rawAnimalId)
+      ? rawAnimalId[0]
+      : undefined;
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [open, setOpen] = useState(false);
@@ -74,7 +82,7 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
     return (
       <Link
         key={item.key}
-        href={item.href!}
+        href={item.href ?? "#"}
         onClick={() => mobile && setOpen(false)}
         className={[
           "flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
@@ -95,7 +103,7 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
       ? [
           {
             key: "animal-root",
-            label: "🐾 Nome do animal",
+            label: "🐾 Animal",
             href: `/dashboard/animals/${animalId}`,
           },
           {
@@ -107,21 +115,6 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
                 key: "animal-clinic-consultations",
                 label: "Consultas",
                 href: `/dashboard/animals/${animalId}/clinic/consultations`,
-              },
-              {
-                key: "animal-clinic-exams",
-                label: "Exames",
-                href: `/dashboard/animals/${animalId}/clinic/exams`,
-              },
-              {
-                key: "animal-clinic-orders",
-                label: "Pedidos",
-                href: `/dashboard/animals/${animalId}/clinic/orders`,
-              },
-              {
-                key: "animal-clinic-hospitalizations",
-                label: "Internações",
-                href: `/dashboard/animals/${animalId}/clinic/hospitalizations`,
               },
               {
                 key: "animal-clinic-medications",
@@ -172,7 +165,9 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
             onClick={() => setOpen(false)}
           />
           <div className="relative h-full w-56 bg-white shadow-xl">
-            <div className="border-b px-4 py-3 text-sm font-semibold">Menu</div>
+            <div className="border-b px-4 py-3 text-sm font-semibold">
+              Menu
+            </div>
             {content}
           </div>
         </div>
