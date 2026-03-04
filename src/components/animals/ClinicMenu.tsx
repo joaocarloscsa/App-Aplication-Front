@@ -1,3 +1,4 @@
+// /var/www/GSA/animal/frontend/src/components/animals/ClinicMenu.tsx
 "use client";
 
 import { useState } from "react";
@@ -12,9 +13,41 @@ export default function ClinicMenu() {
   const base = `/dashboard/animals/${animalId}/clinic`;
 
   const items = [
-    { key: "overview", label: "Clínica", href: base },
-    { key: "medications", label: "Medicações", href: `${base}/medications` },
+    {
+      key: "consultations",
+      label: "Consultas",
+      href: `${base}/consultations`,
+    },
+    {
+      key: "exams",
+      label: "Exames",
+      href: `${base}/exams`,
+    },
+    {
+      key: "orders",
+      label: "Pedidos",
+      href: `${base}/orders`,
+    },
+    {
+      key: "hospitalizations",
+      label: "Internações",
+      href: `${base}/hospitalizations`,
+    },
+    {
+      key: "medications",
+      label: "Medicações",
+      href: `${base}/medications`,
+    },
+    {
+      key: "treatments",
+      label: "Tratamentos",
+      href: `${base}/treatments`,
+    },
   ];
+
+  function isActive(href: string) {
+    return pathname === href || pathname.startsWith(href + "/");
+  }
 
   return (
     <>
@@ -22,9 +55,7 @@ export default function ClinicMenu() {
       <nav className="hidden sm:flex border-b border-zinc-200">
         <ul className="flex gap-6 text-sm">
           {items.map((item) => {
-            const active =
-              pathname === item.href ||
-              pathname.startsWith(item.href + "/");
+            const active = isActive(item.href);
 
             return (
               <li key={item.key}>
@@ -37,9 +68,7 @@ export default function ClinicMenu() {
                       : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
                   ].join(" ")}
                 >
-                  <span className="text-xs">
-                    {active ? "🐾" : ""}
-                  </span>
+                  <span className="text-xs">{active ? "🐾" : ""}</span>
                   {item.label}
                 </Link>
               </li>
@@ -60,11 +89,9 @@ export default function ClinicMenu() {
         </button>
 
         {open && (
-          <div className="absolute z-10 mt-2 w-48 rounded-md border bg-white shadow">
+          <div className="absolute z-10 mt-2 w-56 rounded-md border bg-white shadow">
             {items.map((item) => {
-              const active =
-                pathname === item.href ||
-                pathname.startsWith(item.href + "/");
+              const active = isActive(item.href);
 
               return (
                 <Link
@@ -89,4 +116,3 @@ export default function ClinicMenu() {
     </>
   );
 }
-

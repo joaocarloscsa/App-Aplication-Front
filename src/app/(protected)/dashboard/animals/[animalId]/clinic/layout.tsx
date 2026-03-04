@@ -43,9 +43,36 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
     return <div className="p-6 text-zinc-500">Carregando animal…</div>;
   }
 
+  const menuItems = [
+    {
+      label: "Consultas",
+      href: `${clinicBase}/consultations`,
+    },
+    {
+      label: "Exames",
+      href: `${clinicBase}/exams`,
+    },
+    {
+      label: "Pedidos",
+      href: `${clinicBase}/orders`,
+    },
+    {
+      label: "Internações",
+      href: `${clinicBase}/hospitalizations`,
+    },
+    {
+      label: "Medicações",
+      href: `${clinicBase}/medications`,
+    },
+    {
+      label: "Tratamentos",
+      href: `${clinicBase}/treatments`,
+    },
+  ];
+
   return (
     <section className="mx-auto max-w-5xl px-4 py-6 space-y-10">
-      {/* ✅ TOPO PADRÃO DO ANIMAL (igual /animals/[animalId]) */}
+      {/* HEADER DO ANIMAL */}
       <AnimalHeader
         animal={animal}
         onRevokeTutor={async (personId) => {
@@ -54,56 +81,36 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
         }}
       />
 
+      {/* MENU PRINCIPAL DO ANIMAL */}
       <AnimalSectionMenu animalId={animal.public_id} />
 
-      {/* ✅ SUBMENU DA CLÍNICA (tabs internos) */}
+      {/* SUBMENU DA CLÍNICA */}
       <nav className="border-b border-zinc-200">
         <ul className="flex gap-6 text-sm">
-          <li>
-            <Link
-              href={clinicBase}
-              className={[
-                "flex items-center gap-1 pb-2 transition-colors",
-                isActive(clinicBase, true)
-                  ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
-                  : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
-              ].join(" ")}
-            >
-              Clínica
-            </Link>
-          </li>
+          {menuItems.map((item) => {
+            const active = isActive(item.href);
 
-          <li>
-            <Link
-              href={`${clinicBase}/medications`}
-              className={[
-                "flex items-center gap-1 pb-2 transition-colors",
-                isActive(`${clinicBase}/medications`)
-                  ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
-                  : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
-              ].join(" ")}
-            >
-              Medicações
-            </Link>
-          </li>
-
-          <li>
-            <Link
-              href={`${clinicBase}/treatments`}
-              className={[
-                "flex items-center gap-1 pb-2 transition-colors",
-                isActive(`${clinicBase}/treatments`)
-                  ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
-                  : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
-              ].join(" ")}
-            >
-              Tratamentos
-            </Link>
-          </li>
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={[
+                    "flex items-center gap-1 pb-2 transition-colors",
+                    active
+                      ? "border-b-2 border-zinc-900 font-semibold text-zinc-900"
+                      : "border-b-2 border-transparent text-zinc-600 hover:text-zinc-900",
+                  ].join(" ")}
+                >
+                  {active && <span className="text-xs">🐾</span>}
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
-      {/* ✅ CONTEÚDO */}
+      {/* CONTEÚDO DA PÁGINA */}
       {children}
     </section>
   );

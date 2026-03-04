@@ -23,6 +23,16 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
     return pathname === href || pathname.startsWith(href + "/");
   }
 
+  function hasActiveChild(item: MenuItem): boolean {
+    if (!item.children) return false;
+
+    return item.children.some((child) => {
+      if (child.href && isActive(child.href)) return true;
+      if (child.children) return hasActiveChild(child);
+      return false;
+    });
+  }
+
   function toggleGroup(key: string) {
     setOpenGroups((prev) => ({
       ...prev,
@@ -32,7 +42,8 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
 
   function renderItem(item: MenuItem, level = 0) {
     const active = isActive(item.href);
-    const isOpen = openGroups[item.key];
+    const activeGroup = item.isGroup && hasActiveChild(item);
+    const isOpen = openGroups[item.key] || activeGroup;
 
     if (item.isGroup) {
       return (
@@ -42,11 +53,15 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
             onClick={() => toggleGroup(item.key)}
             className={[
               "flex w-full items-center gap-2 px-2 py-1.5 text-sm rounded-md",
-              "text-zinc-700 hover:text-zinc-900",
+              activeGroup
+                ? "text-zinc-900 font-semibold"
+                : "text-zinc-700 hover:text-zinc-900",
               level === 0 ? "font-medium" : "ml-4",
             ].join(" ")}
           >
-            <span className="w-4 text-xs">{isOpen ? "▼" : "▶"}</span>
+            <span className="w-4 text-xs">
+              {activeGroup ? "🐾" : isOpen ? "▼" : "▶"}
+            </span>
             <span>{item.label}</span>
           </button>
 
@@ -64,7 +79,9 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
         className={[
           "flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
           level === 0 ? "font-medium" : "ml-4 text-zinc-600",
-          active ? "text-zinc-900" : "text-zinc-600 hover:text-zinc-900",
+          active
+            ? "text-zinc-900 font-semibold"
+            : "text-zinc-600 hover:text-zinc-900",
         ].join(" ")}
       >
         <span className="w-4 text-xs">{active ? "🐾" : ""}</span>
@@ -87,9 +104,24 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
             isGroup: true,
             children: [
               {
-                key: "animal-clinic-overview",
-                label: "Visão clínica",
-                href: `/dashboard/animals/${animalId}/clinic`,
+                key: "animal-clinic-consultations",
+                label: "Consultas",
+                href: `/dashboard/animals/${animalId}/clinic/consultations`,
+              },
+              {
+                key: "animal-clinic-exams",
+                label: "Exames",
+                href: `/dashboard/animals/${animalId}/clinic/exams`,
+              },
+              {
+                key: "animal-clinic-orders",
+                label: "Pedidos",
+                href: `/dashboard/animals/${animalId}/clinic/orders`,
+              },
+              {
+                key: "animal-clinic-hospitalizations",
+                label: "Internações",
+                href: `/dashboard/animals/${animalId}/clinic/hospitalizations`,
               },
               {
                 key: "animal-clinic-medications",
@@ -100,12 +132,6 @@ export function SideMenu({ mobile = false }: SideMenuProps) {
                 key: "animal-clinic-treatments",
                 label: "Tratamentos",
                 href: `/dashboard/animals/${animalId}/clinic/treatments`,
-              },
-              // Mantive "Vacinação" como estava, mas se não existir rota, remova.
-              {
-                key: "animal-clinic-vaccines",
-                label: "Vacinação",
-                href: `/dashboard/animals/${animalId}/clinic/vaccination`,
               },
             ],
           },
