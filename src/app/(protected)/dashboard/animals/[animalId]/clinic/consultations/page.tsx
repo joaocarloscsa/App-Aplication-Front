@@ -1,3 +1,4 @@
+// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/page.tsx
 "use client";
 
 import { useParams } from "next/navigation";
@@ -6,9 +7,11 @@ import { useAnimalConsultations } from "@/hooks/useAnimalConsultations";
 import { ConsultationCard } from "@/components/animals/clinic/ConsultationCard";
 import { AnimalConsultationCreateForm } from "@/components/animals/clinic/AnimalConsultationCreateForm";
 import { useModal } from "@/components/ui/modal/ModalProvider";
+import { useRouter } from "next/navigation";
 
 export default function AnimalConsultationsPage() {
   const { animalId } = useParams<{ animalId: string }>();
+  const router = useRouter();
 
   const { consultations, loading, error, reload } =
     useAnimalConsultations(animalId);
@@ -16,6 +19,8 @@ export default function AnimalConsultationsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   const { confirm } = useModal();
+
+  
 
   if (loading) {
     return (
@@ -55,17 +60,16 @@ export default function AnimalConsultationsPage() {
         <AnimalConsultationCreateForm
           animalPublicId={animalId}
           onCancel={() => setShowCreateForm(false)}
-          onCreated={async () => {
-            await reload();
-            setShowCreateForm(false);
+onCreated={async (publicId?: string) => {
+  await reload();
+  setShowCreateForm(false);
 
-            await confirm({
-              title: "Consulta registrada",
-              message: "A consulta foi criada com sucesso.",
-              confirmLabel: "OK",
-              hideCancel: true,
-            });
-          }}
+  if (publicId) {
+    router.push(
+      `/dashboard/animals/${animalId}/clinic/consultations/${publicId}`
+    );
+  }
+}}
         />
       )}
 
@@ -77,12 +81,13 @@ export default function AnimalConsultationsPage() {
       )}
 
       {/* LIST */}
-      {consultations.map((c) => (
-        <ConsultationCard
-          key={c.public_id}
-          consultation={c}
-        />
-      ))}
+{consultations.map((c) => (
+  <ConsultationCard
+    key={c.public_id}
+    consultation={c}
+    animalPublicId={animalId}
+  />
+))}
     </div>
   );
 }

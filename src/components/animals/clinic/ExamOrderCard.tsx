@@ -1,4 +1,3 @@
-// path: frontend/src/components/animals/clinic/ExamOrderCard.tsx
 "use client";
 
 import type { ClinicalExamOrderItem } from "@/types/clinicalExamOrders";
@@ -15,6 +14,17 @@ function statusLabel(status: ClinicalExamOrderItem["status"]) {
       return "Validado";
     default:
       return status;
+  }
+}
+
+function priorityLabel(priority: ClinicalExamOrderItem["priority"]) {
+  switch (priority) {
+    case "URGENT":
+      return "Urgente";
+    case "ROUTINE":
+      return "Rotina";
+    default:
+      return priority;
   }
 }
 
@@ -37,15 +47,15 @@ export function ExamOrderCard({ item }: { item: ClinicalExamOrderItem }) {
   return (
     <div className="rounded-lg border bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-zinc-900 truncate">
-            {item.exam_type}
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-semibold text-zinc-900">{item.exam_type}</p>
+
+          <p className="text-xs text-zinc-500">
+            Pedido {item.public_id}
           </p>
 
           <p className="text-xs text-zinc-500">
-            {item.requested_at
-              ? new Date(item.requested_at).toLocaleString()
-              : ""}
+            {item.requested_at ? new Date(item.requested_at).toLocaleString() : ""}
           </p>
         </div>
 
@@ -71,13 +81,19 @@ export function ExamOrderCard({ item }: { item: ClinicalExamOrderItem }) {
       )}
 
       <div className="flex flex-wrap gap-2 text-xs text-zinc-600">
-        <span className="rounded bg-zinc-50 border px-2 py-0.5">
-          Prioridade: {item.priority}
+        <span className="rounded border bg-zinc-50 px-2 py-0.5">
+          Prioridade: {priorityLabel(item.priority)}
         </span>
 
         {item.laboratory && (
-          <span className="rounded bg-zinc-50 border px-2 py-0.5">
-            Lab: {item.laboratory}
+          <span className="rounded border bg-zinc-50 px-2 py-0.5">
+            Laboratório: {item.laboratory}
+          </span>
+        )}
+
+        {item.consultation?.public_id && (
+          <span className="rounded border bg-zinc-50 px-2 py-0.5">
+            Consulta: {item.consultation.public_id}
           </span>
         )}
       </div>

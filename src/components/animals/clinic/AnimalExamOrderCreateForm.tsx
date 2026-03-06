@@ -1,4 +1,3 @@
-// path: frontend/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -9,7 +8,7 @@ import type { ClinicalExamOrderPriority } from "@/types/clinicalExamOrders";
 type Props = {
   consultationPublicId: string;
   onCreated(): Promise<void> | void;
-  problemIds?: string[]; // opcional, se você depois plugar problemas na consulta
+  problemIds?: string[];
 };
 
 export function AnimalExamOrderCreateForm({
@@ -20,25 +19,22 @@ export function AnimalExamOrderCreateForm({
   const { confirm } = useModal();
 
   const [open, setOpen] = useState(false);
-
   const [examType, setExamType] = useState("");
   const [justification, setJustification] = useState("");
   const [diagnosticHypothesis, setDiagnosticHypothesis] = useState("");
-
-  const [priority, setPriority] = useState<ClinicalExamOrderPriority>("ROUTINE");
+  const [priority, setPriority] =
+    useState<ClinicalExamOrderPriority>("ROUTINE");
   const [laboratory, setLaboratory] = useState("");
-
   const [parametersText, setParametersText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const parameters = useMemo(() => {
     return parametersText
       .split(",")
-      .map((s) => s.trim())
+      .map((value) => value.trim())
       .filter(Boolean);
   }, [parametersText]);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     setError(null);
@@ -72,7 +68,6 @@ export function AnimalExamOrderCreateForm({
       setPriority("ROUTINE");
       setLaboratory("");
       setParametersText("");
-
       setOpen(false);
 
       await onCreated();
@@ -83,8 +78,8 @@ export function AnimalExamOrderCreateForm({
         confirmLabel: "OK",
         hideCancel: true,
       });
-    } catch {
-      setError("Erro ao criar pedido de exame.");
+    } catch (e: any) {
+      setError(e?.message || "Erro ao criar pedido de exame.");
     } finally {
       setLoading(false);
     }
@@ -171,7 +166,9 @@ export function AnimalExamOrderCreateForm({
           <select
             className="w-full rounded border px-3 py-2 text-sm"
             value={priority}
-            onChange={(e) => setPriority(e.target.value as ClinicalExamOrderPriority)}
+            onChange={(e) =>
+              setPriority(e.target.value as ClinicalExamOrderPriority)
+            }
           >
             <option value="ROUTINE">Rotina</option>
             <option value="URGENT">Urgente</option>
@@ -199,7 +196,7 @@ export function AnimalExamOrderCreateForm({
           className="w-full rounded border px-3 py-2 text-sm"
           value={parametersText}
           onChange={(e) => setParametersText(e.target.value)}
-          placeholder="Ex: ureia, creatinina, ALT (separados por vírgula)"
+          placeholder="Ex: ureia, creatinina, ALT"
         />
         <p className="text-[11px] text-zinc-500">
           Use vírgulas para separar.

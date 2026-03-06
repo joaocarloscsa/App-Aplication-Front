@@ -4,10 +4,11 @@
 
 import { useState } from "react";
 import { createAnimalConsultation } from "@/services/animalConsultations";
+import { useRouter } from "next/navigation";
 
 type Props = {
   animalPublicId: string;
-  onCreated(): Promise<void> | void;
+  onCreated(publicId: string): Promise<void> | void;
   onCancel(): void;
 };
 
@@ -43,53 +44,61 @@ export function AnimalConsultationCreateForm({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  async function submit() {
-    setError(null);
+async function submit() {
+  setError(null);
 
-    if (!chiefComplaint.trim()) {
-      setError("A queixa principal é obrigatória.");
-      return;
-    }
-
-    if (!diagnosticImpression.trim()) {
-      setError("A avaliação diagnóstica é obrigatória.");
-      return;
-    }
-
-    if (!conduct.trim()) {
-      setError("A conduta é obrigatória.");
-      return;
-    }
-
-    if (!dateTime) {
-      setError("A data da consulta é obrigatória.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      await createAnimalConsultation(animalPublicId, {
-        type,
-        date_time: new Date(dateTime).toISOString(),
-        chief_complaint: chiefComplaint,
-        diagnostic_impression: diagnosticImpression,
-        conduct,
-        clinical_findings: clinicalFindings || null,
-        temperature: temperature ? Number(temperature) : null,
-        heart_rate: heartRate ? Number(heartRate) : null,
-        respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
-        weight: weight ? Number(weight) : null,
-      });
-
-      await onCreated();
-    } catch {
-      setError("Erro ao registrar consulta.");
-    } finally {
-      setLoading(false);
-    }
+  if (!chiefComplaint.trim()) {
+    setError("A queixa principal é obrigatória.");
+    return;
   }
+
+  if (!diagnosticImpression.trim()) {
+    setError("A avaliação diagnóstica é obrigatória.");
+    return;
+  }
+
+  if (!conduct.trim()) {
+    setError("A conduta é obrigatória.");
+    return;
+  }
+
+  if (!dateTime) {
+    setError("A data da consulta é obrigatória.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const result = await createAnimalConsultation(animalPublicId, {
+      type,
+      date_time: new Date(dateTime).toISOString(),
+      chief_complaint: chiefComplaint,
+      diagnostic_impression: diagnosticImpression,
+      conduct,
+      clinical_findings: clinicalFindings || null,
+      temperature: temperature ? Number(temperature) : null,
+      heart_rate: heartRate ? Number(heartRate) : null,
+      respiratory_rate: respiratoryRate ? Number(respiratoryRate) : null,
+      weight: weight ? Number(weight) : null,
+    });
+
+   await onCreated(result.public_id);
+
+    if (result?.public_id) {
+      router.push(
+        `/dashboard/animals/${animalPublicId}/clinic/consultations/${result.public_id}`
+      );
+    }
+
+  } catch {
+    setError("Erro ao registrar consulta.");
+  } finally {
+    setLoading(false);
+  }
+}
 
   return (
     <div className="rounded-lg border bg-white p-4 space-y-5">

@@ -1,7 +1,5 @@
-// path: frontend/src/services/clinicalExamOrders.ts
 import { apiFetch } from "./api";
 import type {
-  ClinicalExamOrderItem,
   ClinicalExamOrderListResponse,
   ClinicalExamOrderPriority,
 } from "@/types/clinicalExamOrders";
@@ -23,7 +21,7 @@ export async function createClinicalExamOrder(
     parameters?: string[];
     problem_ids?: string[];
   }
-): Promise<{ public_id: string; status: "created" }> {
+): Promise<{ public_id: string; status: string }> {
   return apiFetch(`/api/v1/consultations/${consultationPublicId}/exam-orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,4 +34,3 @@ export async function listAnimalExamOrders(
 ): Promise<ClinicalExamOrderListResponse> {
   return apiFetch(`/api/v1/animals/${animalPublicId}/exam-orders`);
 }
-

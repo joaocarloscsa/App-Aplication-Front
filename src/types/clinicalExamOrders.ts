@@ -1,4 +1,3 @@
-// path: frontend/src/types/clinicalExamOrders.ts
 export type ClinicalExamOrderStatus =
   | "REQUESTED"
   | "COLLECTED"

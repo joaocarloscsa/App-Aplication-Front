@@ -1,22 +1,29 @@
-// path: src/components/animals/clinic/ConsultationCard.tsx
-
 "use client";
 
 import { useState } from "react";
 import { ConsultationHeader } from "./ConsultationHeader";
-import { ConsultationSOAP } from "./ConsultationSOAP";
 import { ConsultationFormFields } from "./ConsultationFormFields";
+import { AnimalExamOrderCreateForm } from "./AnimalExamOrderCreateForm";
+import { useConsultationExamOrders } from "@/components/animals/clinic/hooks/useConsultationExamOrders";
+import { ExamOrderCard } from "./ExamOrderCard";
 
 type Props = {
   consultation: any;
+  animalPublicId: string;
 };
 
-export function ConsultationCard({ consultation }: Props) {
+export function ConsultationCard({ consultation, animalPublicId }: Props) {
   const [open, setOpen] = useState(false);
+
+  const {
+    items: examOrders,
+    loading: examOrdersLoading,
+    error: examOrdersError,
+    reload: reloadExamOrders,
+  } = useConsultationExamOrders(consultation.public_id);
 
   return (
     <div className="rounded-lg border bg-white">
-      {/* HEADER CLICÁVEL */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -29,7 +36,6 @@ export function ConsultationCard({ consultation }: Props) {
           createdByName={consultation.created_by?.name}
         />
 
-        {/* preview curto */}
         <div className="mt-2 text-sm text-zinc-600">
           {consultation.chief_complaint}
         </div>
@@ -39,23 +45,52 @@ export function ConsultationCard({ consultation }: Props) {
         </div>
       </button>
 
-      {/* CONTEÚDO SOAP */}
       {open && (
-        <div className="px-4 pb-4 border-t">
+        <div className="px-4 pb-4 border-t space-y-6">
+          <ConsultationFormFields
+            readOnly
+            chiefComplaint={consultation.chief_complaint ?? ""}
+            clinicalFindings={consultation.clinical_findings ?? ""}
+            diagnosticImpression={consultation.diagnostic_impression ?? ""}
+            conduct={consultation.conduct ?? ""}
+            temperature={consultation.temperature?.toString() ?? ""}
+            heartRate={consultation.heart_rate?.toString() ?? ""}
+            respiratoryRate={consultation.respiratory_rate?.toString() ?? ""}
+            weight={consultation.weight?.toString() ?? ""}
+          />
 
-<ConsultationFormFields
-  readOnly
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold text-zinc-700">
+                Pedidos de exame
+              </h3>
 
-  chiefComplaint={consultation.chief_complaint ?? ""}
-  clinicalFindings={consultation.clinical_findings ?? ""}
-  diagnosticImpression={consultation.diagnostic_impression ?? ""}
-  conduct={consultation.conduct ?? ""}
+              <AnimalExamOrderCreateForm
+                consultationPublicId={consultation.public_id}
+                onCreated={reloadExamOrders}
+              />
+            </div>
 
-  temperature={consultation.temperature?.toString() ?? ""}
-  heartRate={consultation.heart_rate?.toString() ?? ""}
-  respiratoryRate={consultation.respiratory_rate?.toString() ?? ""}
-  weight={consultation.weight?.toString() ?? ""}
-/>
+            {examOrdersLoading && (
+              <p className="text-xs text-zinc-500">Carregando pedidos…</p>
+            )}
+
+            {examOrdersError && (
+              <p className="text-xs text-red-600">{examOrdersError}</p>
+            )}
+
+            {!examOrdersLoading && !examOrdersError && examOrders.length === 0 && (
+              <p className="text-xs text-zinc-500">
+                Nenhum exame solicitado nesta consulta.
+              </p>
+            )}
+
+            <div className="grid gap-3">
+              {examOrders.map((order) => (
+                <ExamOrderCard key={order.public_id} item={order} />
+              ))}
+            </div>
+          </section>
         </div>
       )}
     </div>
