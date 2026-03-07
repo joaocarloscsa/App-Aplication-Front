@@ -4,6 +4,10 @@ import type {
   ClinicalExamOrderPriority,
 } from "@/types/clinicalExamOrders";
 
+import type {
+  ClinicalExamTypeListResponse
+} from "@/types/clinicalExamOrders";
+
 export async function listConsultationExamOrders(
   consultationPublicId: string
 ): Promise<ClinicalExamOrderListResponse> {
@@ -13,7 +17,7 @@ export async function listConsultationExamOrders(
 export async function createClinicalExamOrder(
   consultationPublicId: string,
   payload: {
-    exam_type: string;
+    exam_type_public_id: string;
     justification: string;
     diagnostic_hypothesis?: string | null;
     priority?: ClinicalExamOrderPriority;
@@ -33,4 +37,35 @@ export async function listAnimalExamOrders(
   animalPublicId: string
 ): Promise<ClinicalExamOrderListResponse> {
   return apiFetch(`/api/v1/animals/${animalPublicId}/exam-orders`);
+}
+
+export async function uploadClinicalExamResult(
+  examOrderPublicId: string,
+  file: File,
+  clinicalInterpretation?: string
+) {
+  const form = new FormData();
+
+  form.append("file", file);
+
+  if (clinicalInterpretation) {
+    form.append("clinical_interpretation", clinicalInterpretation);
+  }
+
+  return apiFetch(`/api/v1/exam-orders/${examOrderPublicId}/results`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function validateClinicalExamResult(
+  examResultPublicId: string
+) {
+  return apiFetch(`/api/v1/exam-results/${examResultPublicId}/validate`, {
+    method: "POST",
+  });
+}
+
+export async function listClinicalExamTypes(): Promise<ClinicalExamTypeListResponse> {
+  return apiFetch("/api/v1/exam-types");
 }

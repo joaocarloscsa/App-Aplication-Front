@@ -1,6 +1,11 @@
+// /var/www/GSA/animal/frontend/src/components/animals/clinic/ExamOrderCard.tsx
 "use client";
 
+import { useState } from "react";
 import type { ClinicalExamOrderItem } from "@/types/clinicalExamOrders";
+import {
+  uploadClinicalExamResult,
+} from "@/services/clinicalExamOrders";
 
 function statusLabel(status: ClinicalExamOrderItem["status"]) {
   switch (status) {
@@ -14,17 +19,6 @@ function statusLabel(status: ClinicalExamOrderItem["status"]) {
       return "Validado";
     default:
       return status;
-  }
-}
-
-function priorityLabel(priority: ClinicalExamOrderItem["priority"]) {
-  switch (priority) {
-    case "URGENT":
-      return "Urgente";
-    case "ROUTINE":
-      return "Rotina";
-    default:
-      return priority;
   }
 }
 
@@ -43,67 +37,190 @@ function statusBadge(status: ClinicalExamOrderItem["status"]) {
   }
 }
 
-export function ExamOrderCard({ item }: { item: ClinicalExamOrderItem }) {
-  return (
-    <div className="rounded-lg border bg-white p-4 space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm font-semibold text-zinc-900">{item.exam_type}</p>
+export function ExamOrderCard({
+  item,
+  onUpdated,
+}: {
+  item: ClinicalExamOrderItem;
+  onUpdated?: () => void;
+}) {
 
-          <p className="text-xs text-zinc-500">
-            Pedido {item.public_id}
-          </p>
+  const [uploading, setUploading] = useState(false);
 
-          <p className="text-xs text-zinc-500">
-            {item.requested_at ? new Date(item.requested_at).toLocaleString() : ""}
-          </p>
-        </div>
+  async function handleUpload(file: File) {
+    try {
+      setUploading(true);
 
-        <span
-          className={[
-            "shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-            statusBadge(item.status),
-          ].join(" ")}
-        >
-          {statusLabel(item.status)}
-        </span>
+      await uploadClinicalExamResult(
+        item.public_id,
+        file
+      );
+
+      onUpdated?.();
+
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao enviar resultado.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+
+
+
+
+return (
+  <div className="rounded-xl border bg-white p-5 space-y-5 shadow-sm">
+
+    {/* HEADER */}
+    <div className="flex items-start justify-between">
+
+      <div>
+        <p className="text-base font-semibold text-zinc-900">
+          {item.exam_type?.name}
+        </p>
+
+        <p className="text-xs text-zinc-500">
+          ID do pedido: {item.public_id}
+        </p>
       </div>
 
-      <div className="text-sm text-zinc-800 whitespace-pre-line">
-        {item.justification}
-      </div>
+      <span
+        className={[
+          "rounded-full px-3 py-1 text-xs font-semibold",
+          statusBadge(item.status),
+        ].join(" ")}
+      >
+        {statusLabel(item.status)}
+      </span>
 
-      {item.diagnostic_hypothesis && (
-        <div className="text-xs text-zinc-600 whitespace-pre-line">
-          <span className="font-medium">Hipótese:</span>{" "}
-          {item.diagnostic_hypothesis}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-2 text-xs text-zinc-600">
-        <span className="rounded border bg-zinc-50 px-2 py-0.5">
-          Prioridade: {priorityLabel(item.priority)}
-        </span>
-
-        {item.laboratory && (
-          <span className="rounded border bg-zinc-50 px-2 py-0.5">
-            Laboratório: {item.laboratory}
-          </span>
-        )}
-
-        {item.consultation?.public_id && (
-          <span className="rounded border bg-zinc-50 px-2 py-0.5">
-            Consulta: {item.consultation.public_id}
-          </span>
-        )}
-      </div>
-
-      {item.parameters?.length > 0 && (
-        <div className="text-xs text-zinc-700">
-          <span className="font-medium">Parâmetros:</span>{" "}
-          {item.parameters.join(", ")}
-        </div>
-      )}
     </div>
-  );
+
+
+    {/* METADADOS */}
+    <div className="text-xs text-zinc-500">
+      <span className="font-medium text-zinc-700">
+        Data do pedido:
+      </span>{" "}
+      {new Date(item.requested_at).toLocaleString()}
+    </div>
+
+
+    {/* JUSTIFICATIVA */}
+    <div>
+      <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-1">
+        Justificativa clínica
+      </p>
+
+      <p className="text-sm text-zinc-800 whitespace-pre-line">
+        {item.justification}
+      </p>
+    </div>
+
+
+    {/* HIPÓTESE */}
+    {item.diagnostic_hypothesis && (
+      <div>
+        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-1">
+          Hipótese diagnóstica
+        </p>
+
+        <p className="text-sm text-zinc-800">
+          {item.diagnostic_hypothesis}
+        </p>
+      </div>
+    )}
+
+
+    {/* PARÂMETROS */}
+    {item.parameters?.length > 0 && (
+      <div>
+
+        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">
+          Parâmetros solicitados
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {item.parameters.map((p) => (
+            <span
+              key={p}
+              className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-md"
+            >
+              {p}
+            </span>
+          ))}
+        </div>
+
+      </div>
+    )}
+
+
+    {/* CONFIGURAÇÃO */}
+    <div className="flex flex-wrap gap-4 text-sm border-t pt-3">
+
+      <div>
+        <span className="text-xs text-zinc-500 block">
+          Prioridade
+        </span>
+
+        <span className="text-zinc-800 font-medium">
+          {item.priority === "URGENT" ? "Urgente" : "Rotina"}
+        </span>
+      </div>
+
+      {item.laboratory && (
+        <div>
+          <span className="text-xs text-zinc-500 block">
+            Laboratório
+          </span>
+
+          <span className="text-zinc-800 font-medium">
+            {item.laboratory}
+          </span>
+        </div>
+      )}
+
+    </div>
+
+
+    {/* RESULTADO */}
+    {item.status === "REQUESTED" && (
+      <div className="flex items-center justify-between border-t pt-4">
+
+        <span className="text-sm text-zinc-600">
+          Resultado do exame
+        </span>
+
+        <input
+          type="file"
+          id={`upload-${item.public_id}`}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              handleUpload(file);
+              e.currentTarget.value = "";
+            }
+          }}
+        />
+
+        <label
+          htmlFor={`upload-${item.public_id}`}
+          className="text-xs px-3 py-1.5 bg-zinc-900 text-white rounded-md cursor-pointer hover:bg-zinc-800 transition"
+        >
+          Enviar resultado
+        </label>
+
+      </div>
+    )}
+
+    {item.status === "VALIDATED" && (
+      <div className="text-xs text-green-700 font-medium border-t pt-3">
+        ✓ Exame validado
+      </div>
+    )}
+
+  </div>
+);
 }

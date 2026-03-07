@@ -6,11 +6,38 @@ export type ClinicalExamOrderStatus =
 
 export type ClinicalExamOrderPriority = "ROUTINE" | "URGENT";
 
+/* =========================
+EXAM TYPES (CATÁLOGO)
+========================= */
+
+export type ClinicalExamTypeItem = {
+  public_id: string;
+  code: string;
+  name: string;
+
+  category: {
+    code: string;
+    name: string;
+  };
+};
+
+export type ClinicalExamTypeListResponse = {
+  items: ClinicalExamTypeItem[];
+};
+
+/* =========================
+EXAM ORDERS
+========================= */
+
 export type ClinicalExamOrderItem = {
   public_id: string;
   status: ClinicalExamOrderStatus;
 
-  exam_type: string;
+  exam_type: {
+  public_id: string
+  code: string
+  name: string
+}
   justification: string;
 
   diagnostic_hypothesis: string | null;

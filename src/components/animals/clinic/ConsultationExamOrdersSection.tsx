@@ -1,9 +1,9 @@
-// path: frontend/src/components/animals/clinic/ConsultationExamOrdersSection.tsx
 "use client";
 
-import { useConsultationExamOrders } from "@/hooks/useConsultationExamOrders";
+import { useConsultationExamOrders } from "@/components/animals/clinic/hooks/useConsultationExamOrders";
 import { AnimalExamOrderCreateForm } from "@/components/animals/clinic/AnimalExamOrderCreateForm";
 import { ExamOrderCard } from "@/components/animals/clinic/ExamOrderCard";
+import type { ClinicalExamOrderItem } from "@/types/clinicalExamOrders";
 
 export function ConsultationExamOrdersSection({
   consultationPublicId,
@@ -45,8 +45,12 @@ export function ConsultationExamOrdersSection({
       )}
 
       <div className="grid gap-3">
-        {items.map((i) => (
-          <ExamOrderCard key={i.public_id} item={i} />
+        {items.map((i: ClinicalExamOrderItem) => (
+          <ExamOrderCard
+            key={i.public_id}
+            item={i}
+            onUpdated={reload}
+          />
         ))}
       </div>
     </section>
