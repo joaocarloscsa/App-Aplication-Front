@@ -9,8 +9,11 @@ import type {
 
 import {
   uploadClinicalExamResult,
-  validateClinicalExamResult
+  validateClinicalExamResult,
+  deleteClinicalExamResult
 } from "@/services/clinicalExamOrders";
+
+import { useModal } from "@/components/ui/modal/ModalProvider";
 
 function requestStatusLabel(status: ClinicalExamRequestItem["status"]) {
   switch (status) {
@@ -48,6 +51,8 @@ export function ExamRequestCard({
   request: ClinicalExamRequestItem;
 }) {
 
+  const { confirm } = useModal();
+
   const [localRequest, setLocalRequest] = useState(request);
 
   const [uploading, setUploading] = useState(false);
@@ -64,12 +69,12 @@ export function ExamRequestCard({
         file
       );
 
-      const newResult: ClinicalExamResultItem = {
-        public_id: response.result_public_id,
-        file_name: file.name,
-        uploaded_at: new Date().toISOString(),
-        read_url: null
-      };
+const newResult: ClinicalExamResultItem = {
+  public_id: response.result_public_id ?? response.public_id,
+  file_name: file.name,
+  uploaded_at: new Date().toISOString(),
+  read_url: response.read_url ?? null
+};
 
       setLocalRequest(prev => ({
         ...prev,
@@ -80,13 +85,62 @@ export function ExamRequestCard({
     } catch (e) {
 
       console.error(e);
-      alert("Erro ao enviar resultado");
+
+      await confirm({
+        title: "Erro",
+        message: "Erro ao enviar resultado.",
+        confirmLabel: "OK",
+        hideCancel: true,
+      });
 
     } finally {
 
       setUploading(false);
 
     }
+  }
+
+  async function handleDelete(result: ClinicalExamResultItem) {
+
+    const ok = await confirm({
+      title: "Excluir resultado?",
+      message: "Esta ação não pode ser desfeita.",
+      variant: "danger",
+    });
+
+    if (!ok) return;
+
+    try {
+
+      await deleteClinicalExamResult(result.public_id);
+
+      setLocalRequest(prev => {
+
+        const newResults = prev.results?.filter(
+          r => r.public_id !== result.public_id
+        ) ?? [];
+
+        return {
+          ...prev,
+          status: newResults.length ? prev.status : "REQUESTED",
+          results: newResults
+        };
+
+      });
+
+    } catch (e) {
+
+      console.error(e);
+
+      await confirm({
+        title: "Erro",
+        message: "Erro ao excluir resultado.",
+        confirmLabel: "OK",
+        hideCancel: true,
+      });
+
+    }
+
   }
 
   async function handleValidate(result: ClinicalExamResultItem) {
@@ -105,7 +159,13 @@ export function ExamRequestCard({
     } catch (e) {
 
       console.error(e);
-      alert("Erro ao validar exame");
+
+      await confirm({
+        title: "Erro",
+        message: "Erro ao validar exame.",
+        confirmLabel: "OK",
+        hideCancel: true,
+      });
 
     } finally {
 
@@ -176,7 +236,7 @@ export function ExamRequestCard({
                   </a>
                 )}
 
-                {localRequest.status === "RECEIVED" && (
+                {localRequest.status !== "VALIDATED" && (
                   <button
                     onClick={() => handleValidate(r)}
                     disabled={validatingId === r.public_id}
@@ -185,6 +245,13 @@ export function ExamRequestCard({
                     {validatingId === r.public_id ? "Validando..." : "Validar"}
                   </button>
                 )}
+
+                <button
+                  onClick={() => handleDelete(r)}
+                  className="text-xs px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Excluir
+                </button>
 
               </div>
 
