@@ -1,3 +1,5 @@
+///var/www/GSA/animal/frontend/src/services/clinicalExamOrders.ts
+
 import { apiFetch } from "./api";
 import type {
   ClinicalExamOrderListResponse,
@@ -17,9 +19,10 @@ export async function listConsultationExamOrders(
 export async function createClinicalExamOrder(
   consultationPublicId: string,
   payload: {
-    exam_type_public_id: string;
+    exam_types: string[]; // ✅ agora aceita vários exames
     justification: string;
     diagnostic_hypothesis?: string | null;
+    notes?: string | null;
     priority?: ClinicalExamOrderPriority;
     laboratory?: string | null;
     parameters?: string[];
@@ -39,23 +42,29 @@ export async function listAnimalExamOrders(
   return apiFetch(`/api/v1/animals/${animalPublicId}/exam-orders`);
 }
 
+// /var/www/GSA/animal/frontend/src/services/clinicalExamOrders.ts
+
 export async function uploadClinicalExamResult(
-  examOrderPublicId: string,
+  requestPublicId: string,
   file: File,
   clinicalInterpretation?: string
 ) {
-  const form = new FormData();
 
-  form.append("file", file);
+  const formData = new FormData()
+
+  formData.append("file", file)
 
   if (clinicalInterpretation) {
-    form.append("clinical_interpretation", clinicalInterpretation);
+    formData.append("clinical_interpretation", clinicalInterpretation)
   }
 
-  return apiFetch(`/api/v1/exam-orders/${examOrderPublicId}/results`, {
-    method: "POST",
-    body: form,
-  });
+  return apiFetch(
+    `/api/v1/exam-requests/${requestPublicId}/results`,
+    {
+      method: "POST",
+      body: formData
+    }
+  )
 }
 
 export async function validateClinicalExamResult(
