@@ -38,6 +38,8 @@ export type ClinicalExamResultItem = {
   public_id: string;
   file_name: string;
   uploaded_at: string;
+  validated_at?: string | null;
+  validated?: boolean;
   clinical_interpretation?: string | null;
   read_url?: string | null;
 };

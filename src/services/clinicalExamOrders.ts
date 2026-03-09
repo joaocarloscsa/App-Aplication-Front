@@ -73,7 +73,11 @@ export async function listClinicalExamTypes(): Promise<ClinicalExamTypeListRespo
 
 export async function deleteClinicalExamResult(
   publicId: string
-): Promise<{ status: string } | null> {
+): Promise<{
+  status: string;
+  exam_request_status: string;
+  exam_order_status: string;
+}> {
   return apiFetch(`/api/v1/exam-results/${publicId}`, {
     method: "DELETE",
   });
