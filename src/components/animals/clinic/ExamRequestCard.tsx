@@ -66,12 +66,15 @@ function deriveRequestStatus(
 
 export function ExamRequestCard({
   request,
+  onUpdated,
 }: {
   request: ClinicalExamRequestItem;
+  onUpdated?: () => void;
 }) {
   const { confirm } = useModal();
 
-  const [localRequest, setLocalRequest] = useState<ClinicalExamRequestItem>(request);
+  const [localRequest, setLocalRequest] =
+    useState<ClinicalExamRequestItem>(request);
   const [uploading, setUploading] = useState(false);
   const [validatingId, setValidatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -89,29 +92,7 @@ export function ExamRequestCard({
     try {
       setUploading(true);
 
-      const response = await uploadClinicalExamResult(
-        localRequest.public_id,
-        file
-      );
-
-      const newResult: ClinicalExamResultItem = {
-        public_id: response.result_public_id ?? response.public_id,
-        file_name: file.name,
-        uploaded_at: new Date().toISOString(),
-        validated: false,
-        validated_at: null,
-        read_url: response.read_url ?? null,
-      };
-
-      setLocalRequest((prev) => {
-        const nextResults = [...(prev.results ?? []), newResult];
-
-        return {
-          ...prev,
-          status: deriveRequestStatus(nextResults),
-          results: nextResults,
-        };
-      });
+      await uploadClinicalExamResult(localRequest.public_id, file);
 
       await confirm({
         title: "Resultado enviado",
@@ -119,6 +100,8 @@ export function ExamRequestCard({
         confirmLabel: "OK",
         hideCancel: true,
       });
+
+      onUpdated?.();
     } catch (e) {
       console.error(e);
 
@@ -147,20 +130,7 @@ export function ExamRequestCard({
     try {
       setDeletingId(result.public_id);
 
-      const response = await deleteClinicalExamResult(result.public_id);
-
-      setLocalRequest((prev) => {
-        const nextResults =
-          prev.results?.filter((r) => r.public_id !== result.public_id) ?? [];
-
-        return {
-          ...prev,
-          status:
-            (response?.exam_request_status as ClinicalExamRequestStatus | undefined) ??
-            deriveRequestStatus(nextResults),
-          results: nextResults,
-        };
-      });
+      await deleteClinicalExamResult(result.public_id);
 
       await confirm({
         title: "Resultado excluído",
@@ -168,6 +138,8 @@ export function ExamRequestCard({
         confirmLabel: "OK",
         hideCancel: true,
       });
+
+      onUpdated?.();
     } catch (e) {
       console.error(e);
 
@@ -186,28 +158,7 @@ export function ExamRequestCard({
     try {
       setValidatingId(result.public_id);
 
-      const response = await validateClinicalExamResult(result.public_id);
-
-      setLocalRequest((prev) => {
-        const nextResults =
-          prev.results?.map((item) =>
-            item.public_id === result.public_id
-              ? {
-                  ...item,
-                  validated: true,
-                  validated_at: new Date().toISOString(),
-                }
-              : item
-          ) ?? [];
-
-        return {
-          ...prev,
-          status:
-            (response?.exam_request_status as ClinicalExamRequestStatus | undefined) ??
-            deriveRequestStatus(nextResults),
-          results: nextResults,
-        };
-      });
+      await validateClinicalExamResult(result.public_id);
 
       await confirm({
         title: "Resultado validado",
@@ -215,6 +166,8 @@ export function ExamRequestCard({
         confirmLabel: "OK",
         hideCancel: true,
       });
+
+      onUpdated?.();
     } catch (e) {
       console.error(e);
 
@@ -263,13 +216,12 @@ export function ExamRequestCard({
                 className="border rounded p-2 bg-white flex items-center justify-between gap-3"
               >
                 <div className="text-xs text-zinc-700 flex-1 space-y-1">
-                  <div className="font-medium">
-                    {r.file_name}
-                  </div>
+                  <div className="font-medium">{r.file_name}</div>
 
                   {r.uploaded_at && (
                     <div className="text-zinc-400">
-                      Enviado em {new Date(r.uploaded_at).toLocaleString()}
+                      Enviado em{" "}
+                      {new Date(r.uploaded_at).toLocaleString()}
                     </div>
                   )}
 
@@ -277,7 +229,9 @@ export function ExamRequestCard({
                     <div className="text-green-600 font-medium">
                       Validado
                       {r.validated_at
-                        ? ` em ${new Date(r.validated_at).toLocaleString()}`
+                        ? ` em ${new Date(
+                            r.validated_at
+                          ).toLocaleString()}`
                         : ""}
                     </div>
                   ) : (
@@ -336,7 +290,6 @@ export function ExamRequestCard({
         disabled={uploading}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const file = e.target.files?.[0];
-
           if (!file) return;
 
           handleUpload(file);

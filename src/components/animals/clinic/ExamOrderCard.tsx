@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ClinicalExamOrderItem } from "@/types/clinicalExamOrders";
 import { ExamRequestCard } from "./ExamRequestCard";
 
@@ -36,108 +37,82 @@ export function ExamOrderCard({
   item: ClinicalExamOrderItem;
   onUpdated?: () => void;
 }) {
+
+  const [open, setOpen] = useState(false);
+
   const examCount = item.requests?.length ?? 0;
 
   return (
-    <div className="rounded-xl border bg-white p-5 space-y-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-base font-semibold text-zinc-900">
-            Pedido de exames ({examCount})
-          </p>
+    <div className="rounded-xl border bg-white shadow-sm">
 
-          <p className="text-xs text-zinc-500">
-            ID do pedido: {item.public_id}
-          </p>
-        </div>
+      {/* HEADER */}
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full text-left p-5 space-y-3 hover:bg-zinc-50"
+      >
 
-        <span
-          className={[
-            "rounded-full px-3 py-1 text-xs font-semibold",
-            statusBadge(item.status),
-          ].join(" ")}
-        >
-          {statusLabel(item.status)}
-        </span>
-      </div>
+        <div className="flex items-start justify-between">
 
-      <div className="text-xs text-zinc-500">
-        <span className="font-medium text-zinc-700">
-          Data do pedido:
-        </span>{" "}
-        {item.requested_at
-          ? new Date(item.requested_at).toLocaleString()
-          : "-"}
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-1">
-          Justificativa clínica
-        </p>
-
-        <p className="text-sm text-zinc-800 whitespace-pre-line">
-          {item.justification}
-        </p>
-      </div>
-
-      {item.diagnostic_hypothesis && (
-        <div>
-          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-1">
-            Hipótese diagnóstica
-          </p>
-
-          <p className="text-sm text-zinc-800">
-            {item.diagnostic_hypothesis}
-          </p>
-        </div>
-      )}
-
-      {item.parameters?.length ? (
-        <div>
-          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">
-            Parâmetros solicitados
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {item.parameters.map((p) => (
-              <span
-                key={p}
-                className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-md"
-              >
-                {p}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap gap-4 text-sm border-t pt-3">
-        <div>
-          <span className="text-xs text-zinc-500 block">
-            Prioridade
-          </span>
-
-          <span className="text-zinc-800 font-medium">
-            {item.priority === "URGENT" ? "Urgente" : "Rotina"}
-          </span>
-        </div>
-
-        {item.laboratory && (
           <div>
-            <span className="text-xs text-zinc-500 block">
-              Laboratório
-            </span>
 
-            <span className="text-zinc-800 font-medium">
-              {item.laboratory}
-            </span>
+            <p className="text-base font-semibold text-zinc-900">
+              Pedido de exames ({examCount})
+            </p>
+
+            <p className="text-xs text-zinc-500">
+              ID do pedido: {item.public_id}
+            </p>
+
           </div>
-        )}
-      </div>
 
-      {item.requests?.length ? (
-        <div className="space-y-3 border-t pt-4">
-          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide">
+          <span
+            className={[
+              "rounded-full px-3 py-1 text-xs font-semibold",
+              statusBadge(item.status),
+            ].join(" ")}
+          >
+            {statusLabel(item.status)}
+          </span>
+
+        </div>
+
+        <div className="flex gap-6 text-xs text-zinc-500">
+
+          <div>
+            <span className="font-medium text-zinc-700">
+              Pedido em:
+            </span>{" "}
+            {item.requested_at
+              ? new Date(item.requested_at).toLocaleString()
+              : "-"}
+          </div>
+
+          <div>
+            <span className="font-medium text-zinc-700">
+              Prioridade:
+            </span>{" "}
+            {item.priority === "URGENT" ? "Urgente" : "Rotina"}
+          </div>
+
+          {item.laboratory && (
+            <div>
+              <span className="font-medium text-zinc-700">
+                Laboratório:
+              </span>{" "}
+              {item.laboratory}
+            </div>
+          )}
+
+        </div>
+
+      </button>
+
+      {/* BODY */}
+      {open && item.requests?.length ? (
+
+        <div className="border-t px-5 pb-5 space-y-3">
+
+          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide pt-4">
             Exames solicitados
           </p>
 
@@ -148,8 +123,11 @@ export function ExamOrderCard({
               onUpdated={onUpdated}
             />
           ))}
+
         </div>
+
       ) : null}
+
     </div>
   );
 }

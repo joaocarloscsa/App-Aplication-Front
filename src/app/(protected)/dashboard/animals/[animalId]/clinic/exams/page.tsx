@@ -1,14 +1,19 @@
-// path: frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/exams/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
-import type { ClinicalExamOrderItem } from "@/types/clinicalExamOrders";
 import { listAnimalExamOrders } from "@/services/clinicalExamOrders";
-import { ExamOrderCard } from "@/components/animals/clinic/ExamOrderCard";
+import type {
+  ClinicalExamOrderItem,
+  ClinicalExamResultItem
+} from "@/types/clinicalExamOrders";
 
-const RESULT_STATUSES = new Set(["RECEIVED", "VALIDATED"]);
+type ExamRow = {
+  result: ClinicalExamResultItem;
+  examName: string;
+  requestedAt: string | null;
+};
 
 export default function AnimalExamsPage() {
   const { animalId } = useParams<{ animalId: string }>();
@@ -17,64 +22,129 @@ export default function AnimalExamsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
+  async function load() {
+    try {
+      setLoading(true);
+      setError(null);
 
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await listAnimalExamOrders(animalId);
-        if (!alive) return;
-        setItems(data.items || []);
-      } catch (e: any) {
-        if (!alive) return;
-        setError(e?.message || "Erro ao carregar exames");
-      } finally {
-        if (!alive) return;
-        setLoading(false);
+      const data = await listAnimalExamOrders(animalId);
+      setItems(data.items ?? []);
+    } catch (e: any) {
+      setError(e?.message || "Erro ao carregar exames");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (animalId) load();
+  }, [animalId]);
+
+  const exams = useMemo(() => {
+    const rows: ExamRow[] = [];
+
+    for (const order of items) {
+      for (const request of order.requests ?? []) {
+        for (const result of request.results ?? []) {
+          rows.push({
+            result,
+            examName: request.exam_type.name,
+            requestedAt: order.requested_at ?? null
+          });
+        }
       }
     }
 
-    if (animalId) load();
-    return () => {
-      alive = false;
-    };
-  }, [animalId]);
-
-  const results = useMemo(
-    () => items.filter((i) => RESULT_STATUSES.has(i.status)),
-    [items]
-  );
+    return rows;
+  }, [items]);
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1">
-        <h2 className="text-sm font-semibold text-zinc-900">Exames</h2>
+
+      <header>
+        <h2 className="text-sm font-semibold text-zinc-900">
+          Exames
+        </h2>
+
         <p className="text-xs text-zinc-500">
-          MVP: mostra pedidos com status RECEIVED/VALIDATED como “exames disponíveis”.
+          Arquivos de exames recebidos para este animal
         </p>
       </header>
 
-      {loading && <div className="text-sm text-zinc-500">Carregando…</div>}
+      {loading && (
+        <div className="text-sm text-zinc-500">
+          Carregando…
+        </div>
+      )}
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm rounded">
           {error}
         </div>
       )}
 
-      {!loading && !error && results.length === 0 && (
-        <div className="rounded-md border bg-white px-4 py-3 text-sm text-zinc-600">
-          Nenhum exame recebido/validado ainda.
+      {!loading && !error && exams.length === 0 && (
+        <div className="border bg-white px-4 py-3 text-sm text-zinc-600 rounded">
+          Nenhum exame disponível.
         </div>
       )}
 
-      <div className="grid gap-3">
-        {results.map((item) => (
-          <ExamOrderCard key={item.public_id} item={item} />
+      <div className="space-y-2">
+
+        {exams.map(({ result, examName, requestedAt }) => (
+
+          <div
+            key={result.public_id}
+            className="border rounded-md bg-white px-4 py-3 flex items-center justify-between"
+          >
+
+            <div className="text-sm space-y-1">
+
+              <div className="font-medium text-zinc-900">
+                {result.file_name}
+              </div>
+
+              <div className="text-xs text-zinc-500">
+                Exame: {examName}
+              </div>
+
+              {requestedAt && (
+                <div className="text-xs text-zinc-400">
+                  Pedido em {new Date(requestedAt).toLocaleString()}
+                </div>
+              )}
+
+              {result.uploaded_at && (
+                <div className="text-xs text-zinc-400">
+                  Recebido em {new Date(result.uploaded_at).toLocaleString()}
+                </div>
+              )}
+
+              {result.validated && (
+                <div className="text-xs text-green-600 font-medium">
+                  Validado
+                </div>
+              )}
+
+            </div>
+
+            {result.read_url && (
+              <a
+                href={result.read_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Abrir
+              </a>
+            )}
+
+          </div>
+
         ))}
+
       </div>
+
     </div>
   );
 }

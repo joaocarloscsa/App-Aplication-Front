@@ -6,6 +6,7 @@ import { ConsultationFormFields } from "./ConsultationFormFields";
 import { AnimalExamOrderCreateForm } from "./AnimalExamOrderCreateForm";
 import { useConsultationExamOrders } from "@/components/animals/clinic/hooks/useConsultationExamOrders";
 import { ExamOrderCard } from "./ExamOrderCard";
+import { ConsultationNotesSection } from "./ConsultationNotesSection";
 
 type Props = {
   consultation: any;
@@ -59,6 +60,12 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
             weight={consultation.weight?.toString() ?? ""}
           />
 
+          <ConsultationNotesSection
+            consultationPublicId={consultation.public_id}
+            notes={consultation.notes ?? []}
+            onCreated={() => {}}
+          />
+
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xs font-semibold text-zinc-700">
@@ -87,7 +94,11 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
 
             <div className="grid gap-3">
               {examOrders.map((order) => (
-                <ExamOrderCard key={order.public_id} item={order} />
+                <ExamOrderCard
+                  key={order.public_id}
+                  item={order}
+                  onUpdated={reloadExamOrders}
+                />
               ))}
             </div>
           </section>
