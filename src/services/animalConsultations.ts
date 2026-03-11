@@ -37,6 +37,14 @@ export type ConsultationNoteDTO = {
   } | null;
 };
 
+export type ConsultationProblemDTO = {
+  public_id: string;
+  title: string;
+  status: string;
+  opened_at?: string | null;
+  resolved_at?: string | null;
+};
+
 export type ConsultationDetailsDTO = {
   consultation: {
     public_id: string;
@@ -59,7 +67,10 @@ export type ConsultationDetailsDTO = {
     } | null;
   };
 
+  problems: ConsultationProblemDTO[];
+
   notes: ConsultationNoteDTO[];
+
   exam_orders: any[];
 };
 
@@ -84,13 +95,14 @@ export async function fetchAnimalConsultations(
 export async function fetchConsultationDetails(
   consultationPublicId: string
 ): Promise<ConsultationDetailsDTO> {
+
   const res: any = await http(
-    `/api/v1/consultations/${consultationPublicId}`
+    `/api/v1/clinical-consultations/${consultationPublicId}`
   );
 
-  const c = res?.consultations?.[0];
+  const c = res.consultation ?? res;
 
-  if (!c) {
+  if (!c || !c.public_id) {
     throw new Error("Consulta não encontrada.");
   }
 
@@ -111,7 +123,9 @@ export async function fetchConsultationDetails(
       created_by: c.created_by ?? null,
     },
 
-    notes: c.notes ?? [],
+    problems: res.problems ?? [],
+
+    notes: res.notes ?? [],
 
     exam_orders: res.exam_orders ?? [],
   };

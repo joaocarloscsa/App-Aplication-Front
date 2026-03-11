@@ -4,9 +4,12 @@ import { useState } from "react";
 import { ConsultationHeader } from "./ConsultationHeader";
 import { ConsultationFormFields } from "./ConsultationFormFields";
 import { AnimalExamOrderCreateForm } from "./AnimalExamOrderCreateForm";
+import { ProblemCreateForm } from "@/components/animals/clinic/problems/ProblemCreateForm";
 import { useConsultationExamOrders } from "@/components/animals/clinic/hooks/useConsultationExamOrders";
 import { ExamOrderCard } from "./ExamOrderCard";
 import { ConsultationNotesSection } from "./ConsultationNotesSection";
+import { useRouter } from "next/navigation";
+import { ProblemLinkForm } from "@/components/animals/clinic/problems/ProblemLinkForm";
 
 type Props = {
   consultation: any;
@@ -14,7 +17,10 @@ type Props = {
 };
 
 export function ConsultationCard({ consultation, animalPublicId }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [showProblemForm, setShowProblemForm] = useState(false);
+  const [showLinkForm, setShowLinkForm] = useState(false);
 
   const {
     items: examOrders,
@@ -63,45 +69,120 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
           <ConsultationNotesSection
             consultationPublicId={consultation.public_id}
             notes={consultation.notes ?? []}
-            onCreated={() => {}}
+            onCreated={() => { }}
           />
 
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-xs font-semibold text-zinc-700">
-                Pedidos de exame
-              </h3>
+<section className="space-y-3">
 
-              <AnimalExamOrderCreateForm
-                consultationPublicId={consultation.public_id}
-                onCreated={reloadExamOrders}
-              />
-            </div>
+  <div className="flex items-center justify-between">
+    <h3 className="text-xs font-semibold text-zinc-700">
+      Problemas clínicos
+    </h3>
 
-            {examOrdersLoading && (
-              <p className="text-xs text-zinc-500">Carregando pedidos…</p>
+    <div className="flex gap-3">
+
+      <button
+        type="button"
+        onClick={() => setShowProblemForm((v) => !v)}
+        className="text-xs text-zinc-700 hover:underline"
+      >
+        + Abrir problema
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setShowLinkForm((v) => !v)}
+        className="text-xs text-blue-600 hover:underline"
+      >
+        + Associar problema
+      </button>
+
+    </div>
+  </div>
+
+
+  {consultation.problems?.length === 0 && (
+    <p className="text-xs text-zinc-500">
+      Nenhum problema associado.
+    </p>
+  )}
+
+
+  {consultation.problems?.length > 0 && (
+
+    <div className="space-y-2">
+
+      {consultation.problems.map((p: any) => (
+
+        <div
+          key={p.public_id}
+          className="rounded border bg-zinc-50 px-3 py-2"
+        >
+
+<div className="flex items-center justify-between">
+
+  <span className="text-sm font-medium text-zinc-900">
+    {p.title}
+  </span>
+
+  <span className="text-xs text-zinc-500">
+    {p.status?.label}
+  </span>
+
+</div>
+
+          <div className="text-xs text-zinc-500 mt-1">
+
+            {p.opened_at && (
+              <span>
+                Associado em {new Date(p.opened_at).toLocaleString()}
+              </span>
             )}
 
-            {examOrdersError && (
-              <p className="text-xs text-red-600">{examOrdersError}</p>
+            {p.created_by?.name && (
+              <span>
+                {" • "}
+                por {p.created_by.name}
+              </span>
             )}
 
-            {!examOrdersLoading && !examOrdersError && examOrders.length === 0 && (
-              <p className="text-xs text-zinc-500">
-                Nenhum exame solicitado nesta consulta.
-              </p>
-            )}
+          </div>
 
-            <div className="grid gap-3">
-              {examOrders.map((order) => (
-                <ExamOrderCard
-                  key={order.public_id}
-                  item={order}
-                  onUpdated={reloadExamOrders}
-                />
-              ))}
-            </div>
-          </section>
+        </div>
+
+      ))}
+
+    </div>
+
+  )}
+
+
+  {showProblemForm && (
+    <ProblemCreateForm
+      consultationPublicId={consultation.public_id}
+      onCancel={() => setShowProblemForm(false)}
+      onCreated={async (problemPublicId) => {
+        setShowProblemForm(false);
+        router.push(
+          `/dashboard/animals/${animalPublicId}/clinic/problems/${problemPublicId}`
+        );
+      }}
+    />
+  )}
+
+
+  {showLinkForm && (
+    <ProblemLinkForm
+      animalPublicId={animalPublicId}
+      consultationPublicId={consultation.public_id}
+      alreadyLinked={consultation.problems?.map((p: any) => p.public_id) ?? []}
+      onLinked={() => setShowLinkForm(false)}
+    />
+  )}
+
+</section>
+
+
         </div>
       )}
     </div>

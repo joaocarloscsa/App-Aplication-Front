@@ -1,4 +1,3 @@
-// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
 "use client";
 
 import { ReactNode, useCallback, useEffect, useState } from "react";
@@ -43,28 +42,32 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
     return <div className="p-6 text-zinc-500">Carregando animal…</div>;
   }
 
-const menuItems = [
-  {
-    label: "Consultas",
-    href: `${clinicBase}/consultations`,
-  },
-  {
-    label: "Pedidos",
-    href: `${clinicBase}/orders`,
-  },
-  {
-    label: "Exames",
-    href: `${clinicBase}/exams`,
-  },
-  {
-    label: "Medicações",
-    href: `${clinicBase}/medications`,
-  },
-  {
-    label: "Tratamentos",
-    href: `${clinicBase}/treatments`,
-  },
-];
+  const menuItems = [
+    {
+      label: "Consultas",
+      href: `${clinicBase}/consultations`,
+    },
+    {
+      label: "Problemas",
+      href: `${clinicBase}/problems`,
+    },
+    {
+      label: "Pedidos",
+      href: `${clinicBase}/orders`,
+    },
+    {
+      label: "Exames",
+      href: `${clinicBase}/exams`,
+    },
+    {
+      label: "Medicações",
+      href: `${clinicBase}/medications`,
+    },
+    {
+      label: "Tratamentos",
+      href: `${clinicBase}/treatments`,
+    },
+  ];
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-6 space-y-10">

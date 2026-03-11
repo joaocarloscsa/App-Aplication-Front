@@ -64,11 +64,8 @@ onCreated={async (publicId?: string) => {
   await reload();
   setShowCreateForm(false);
 
-  if (publicId) {
-    router.push(
-      `/dashboard/animals/${animalId}/clinic/consultations/${publicId}`
-    );
-  }
+await reload();
+setShowCreateForm(false);
 }}
         />
       )}

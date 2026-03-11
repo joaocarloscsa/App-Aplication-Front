@@ -1,4 +1,3 @@
-// path: frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -18,6 +17,14 @@ export default function AnimalClinicPage() {
         >
           <p className="text-sm font-medium text-zinc-900">Consultas</p>
           <p className="text-xs text-zinc-500">Histórico completo de consultas clínicas</p>
+        </Link>
+
+        <Link
+          href={`/dashboard/animals/${animalId}/clinic/problems`}
+          className="rounded-lg border bg-white px-4 py-3 hover:bg-zinc-50"
+        >
+          <p className="text-sm font-medium text-zinc-900">Problemas clínicos</p>
+          <p className="text-xs text-zinc-500">Acompanhamento longitudinal dos problemas do animal</p>
         </Link>
 
         <Link
