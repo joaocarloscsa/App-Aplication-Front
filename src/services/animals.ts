@@ -25,12 +25,9 @@ export type ParentPayload = ParentByPublicId | ParentExternal;
 
 export type AnimalListItem = {
   public_id: string;
-  call_name: string | null;
-  official_name?: string | null;
-  type: string | null;
-  photo?: {
-    url?: string;
-  };
+  call_name?: string | null;
+  type?: string | null;
+  my_role?: string | null;
 };
 
 /* =========================

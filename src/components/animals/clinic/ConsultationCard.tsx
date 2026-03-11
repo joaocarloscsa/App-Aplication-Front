@@ -10,6 +10,7 @@ import { ExamOrderCard } from "./ExamOrderCard";
 import { ConsultationNotesSection } from "./ConsultationNotesSection";
 import { useRouter } from "next/navigation";
 import { ProblemLinkForm } from "@/components/animals/clinic/problems/ProblemLinkForm";
+import { ConsultationExamOrdersSection } from "@/components/animals/clinic/ConsultationExamOrdersSection";
 
 type Props = {
   consultation: any;
@@ -66,6 +67,11 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
             weight={consultation.weight?.toString() ?? ""}
           />
 
+
+            <ConsultationExamOrdersSection
+    consultationPublicId={consultation.public_id}
+  />
+  
           <ConsultationNotesSection
             consultationPublicId={consultation.public_id}
             notes={consultation.notes ?? []}

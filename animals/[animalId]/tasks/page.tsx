@@ -1,5 +1,3 @@
-// path: frontend/src/app/dashboard/animals/[animalId]/agenda/tasks/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,10 +6,6 @@ import { AnimalTaskItemCard } from "@/components/agenda/AnimalTaskItemCard";
 
 import {
   getAnimalTasks,
-  markTaskDone,
-  reopenTask,
-  cancelTask,
-  cancelTaskRecurrence,
 } from "@/services/animalTasks";
 
 import type { AnimalTaskItem } from "@/types/agenda";
@@ -24,38 +18,6 @@ import { AgendaTaskFilters } from "@/components/agenda/AgendaTaskFilters";
  * ======================= */
 
 type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
-
-/* =======================
- * Visual helpers
- * ======================= */
-
-function getTaskVisualState(task: AnimalTaskItem) {
-  if (task.status === "CANCELED") return "canceled";
-  if (task.status === "DONE") return "done";
-
-  if (
-    task.status === "PLANNED" &&
-    task.scheduled_at &&
-    new Date(task.scheduled_at).getTime() < Date.now()
-  ) {
-    return "late";
-  }
-
-  return "planned";
-}
-
-const stateStyle: Record<string, string> = {
-  planned: "bg-white",
-  late: "bg-amber-50",
-  done: "bg-green-50",
-  canceled: "bg-zinc-100",
-};
-
-const statusBadge: Record<string, string> = {
-  PLANNED: "bg-zinc-100 text-zinc-700",
-  DONE: "bg-green-100 text-green-800",
-  CANCELED: "bg-red-100 text-red-800",
-};
 
 /* =======================
  * Datas (regra única)
@@ -118,6 +80,17 @@ export default function AnimalAgendaTasksPage() {
   const [statusFilter, setStatusFilter] =
     useState<TaskStatusFilter>("PLANNED");
 
+  /* =======================
+   * novos estados exigidos
+   * ======================= */
+
+  const [treatments] = useState<any[]>([]);
+const [selectedTreatment, setSelectedTreatment] =
+  useState<string | undefined>(undefined);
+
+const [selectedSchedule, setSelectedSchedule] =
+  useState<string | undefined>(undefined);
+
   async function load() {
     if (!animalId) return;
 
@@ -165,6 +138,9 @@ export default function AnimalAgendaTasksPage() {
         from={from}
         to={to}
         status={statusFilter}
+        treatments={treatments}
+        selectedTreatment={selectedTreatment}
+        selectedSchedule={selectedSchedule}
         onToggleToday={setTodayOnly}
         onToggleExpanded={() => setExpanded((v) => !v)}
         onChangeYear={setYear}
@@ -172,7 +148,10 @@ export default function AnimalAgendaTasksPage() {
         onChangeFrom={setFrom}
         onChangeTo={setTo}
         onChangeStatus={setStatusFilter}
+        onChangeTreatment={setSelectedTreatment}
+        onChangeSchedule={setSelectedSchedule}
       />
+
       <ul className="space-y-3">
         {tasks.map((task) => (
           <AnimalTaskItemCard

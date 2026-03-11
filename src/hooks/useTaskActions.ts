@@ -26,12 +26,20 @@ export function useTaskActions(
     return value;
   }
 
-  async function done() {
-    const c = await askComment();
-    if (c === null) return;
-
-    await markTaskDone(animalId, taskId, c);
+async function execute(
+  action: () => Promise<unknown>
+){
+    await action();
     await onReload();
+  }
+
+  async function done() {
+    const comment = await askComment();
+    if (comment === null) return;
+
+    await execute(() =>
+      markTaskDone(animalId, taskId, comment)
+    );
   }
 
   async function cancel() {
@@ -42,19 +50,23 @@ export function useTaskActions(
 
     if (!ok) return;
 
-    const c = await askComment("Motivo (opcional):");
-    if (c === null) return;
+    const comment = await askComment("Motivo (opcional):");
+    if (comment === null) return;
 
-    await cancelTask(animalId, taskId, c);
-    await onReload();
+    await execute(() =>
+      cancelTask(animalId, taskId, comment)
+    );
   }
 
   async function reopen() {
-    const c = await askComment("Motivo da reabertura (opcional):");
-    if (c === null) return;
+    const comment = await askComment(
+      "Motivo da reabertura (opcional):"
+    );
+    if (comment === null) return;
 
-    await reopenTask(animalId, taskId, c);
-    await onReload();
+    await execute(() =>
+      reopenTask(animalId, taskId, comment)
+    );
   }
 
   async function cancelRecurrence() {
@@ -67,14 +79,14 @@ export function useTaskActions(
 
     if (!ok) return;
 
-    await cancelTaskRecurrence(
-      animalId,
-      taskId,
-      "Recorrência cancelada pelo utilizador",
-      true
+    await execute(() =>
+      cancelTaskRecurrence(
+        animalId,
+        taskId,
+        "Recorrência cancelada pelo utilizador",
+        true
+      )
     );
-
-    await onReload();
   }
 
   return {

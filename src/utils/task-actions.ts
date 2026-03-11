@@ -1,6 +1,6 @@
 // path: frontend/src/utils/task-actions.ts
 
-import type { AnimalTaskItem } from "@/services/animalTasks";
+import type { AnimalTaskItem } from "@/types/agenda";
 
 export type TaskStatus = "PLANNED" | "DONE" | "CANCELED";
 

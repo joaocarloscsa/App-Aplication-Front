@@ -1,3 +1,5 @@
+// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
+
 "use client";
 
 import { ReactNode, useCallback, useEffect, useState } from "react";
@@ -10,23 +12,60 @@ import { revokeTutorFromAnimal } from "@/services/animalTutors";
 import { AnimalHeader } from "@/components/animals/AnimalHeader";
 import { AnimalSectionMenu } from "@/components/animals/AnimalSectionMenu";
 
+type ClinicLayoutAnimalDTO = {
+  public_id: string;
+  call_name?: string | null;
+  photo?: unknown;
+  my_role?: string | null;
+  permissions?: {
+    edit?: boolean;
+    invite?: boolean;
+    clinic?: boolean;
+    agenda?: boolean;
+    files?: boolean;
+    tutors?: boolean;
+    organizations?: boolean;
+    history?: boolean;
+  } | null;
+  tutors?: {
+    primary?: {
+      person_public_id: string;
+      name: string;
+    } | null;
+    invited?: Array<{
+      person_public_id: string;
+      name: string;
+    }>;
+  } | null;
+  [key: string]: unknown;
+};
+
 export default function ClinicLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const params = useParams();
   const animalId = params?.animalId as string;
 
-  const [animal, setAnimal] = useState<any>(null);
+  const [animal, setAnimal] = useState<ClinicLayoutAnimalDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
   const animalBase = `/dashboard/animals/${animalId}`;
   const clinicBase = `${animalBase}/clinic`;
 
   const reloadAnimal = useCallback(async () => {
-    if (!animalId) return;
+    if (!animalId) {
+      setAnimal(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    const data = await getAnimal(animalId);
-    setAnimal(data);
-    setLoading(false);
+
+    try {
+      const data = await getAnimal<ClinicLayoutAnimalDTO>(animalId);
+      setAnimal(data);
+    } finally {
+      setLoading(false);
+    }
   }, [animalId]);
 
   useEffect(() => {

@@ -1,9 +1,7 @@
 // path: frontend/src/services/animalTasks.ts
 
 import { apiFetch } from "@/services/api";
-import type {
-  AnimalTaskListResponse,
-} from "@/types/agenda";
+import type { AnimalTaskListResponse } from "@/types/agenda";
 
 export async function getAnimalTasks(
   animalId: string,
@@ -28,18 +26,25 @@ export async function getAnimalTasks(
   const query = qs.toString();
   const url = `/api/v1/animals/${animalId}/tasks${query ? `?${query}` : ""}`;
 
-  return apiFetch(url, { method: "GET" });
+  const res = await apiFetch(url, { method: "GET" });
+
+  return res as AnimalTaskListResponse;
 }
 
 export async function createAnimalTask(
   animalId: string,
   payload: any
 ): Promise<{ id: number }> {
-  return apiFetch(`/api/v1/animals/${animalId}/tasks`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const res = await apiFetch(
+    `/api/v1/animals/${animalId}/tasks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload
+    }
+  );
+
+  return res as { id: number };
 }
 
 export async function markTaskDone(
@@ -96,7 +101,6 @@ export async function cancelTask(
   );
 }
 
-// frontend/src/services/animalTasks.ts
 export async function cancelTaskRecurrence(
   animalId: string,
   taskId: number,
@@ -115,5 +119,3 @@ export async function cancelTaskRecurrence(
     }
   );
 }
-
-

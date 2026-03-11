@@ -1,750 +1,2579 @@
-diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
-index 9a33071..841a09f 100644
---- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
-+++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
-@@ -1,9 +1,7 @@
--// path: src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
+diff --git a/animals/[animalId]/tasks/page.tsx b/animals/[animalId]/tasks/page.tsx
+index 2b311dc..098b2ba 100644
+--- a/animals/[animalId]/tasks/page.tsx
++++ b/animals/[animalId]/tasks/page.tsx
+@@ -1,5 +1,3 @@
+-// path: frontend/src/app/dashboard/animals/[animalId]/agenda/tasks/page.tsx
 -
  "use client";
  
  import { useEffect, useState } from "react";
--import { useParams } from "next/navigation";
-+import { useParams, useRouter } from "next/navigation";
+@@ -8,10 +6,6 @@ import { AnimalTaskItemCard } from "@/components/agenda/AnimalTaskItemCard";
  
  import {
-   fetchConsultationDetails,
-@@ -14,18 +12,23 @@ import { ConsultationHeader } from "@/components/animals/clinic/ConsultationHead
- import { ConsultationSOAP } from "@/components/animals/clinic/ConsultationSOAP";
- import { ConsultationNotesSection } from "@/components/animals/clinic/ConsultationNotesSection";
- import { ExamOrderCard } from "@/components/animals/clinic/ExamOrderCard";
-+import { ProblemCreateForm } from "@/components/animals/clinic/problems/ProblemCreateForm";
+   getAnimalTasks,
+-  markTaskDone,
+-  reopenTask,
+-  cancelTask,
+-  cancelTaskRecurrence,
+ } from "@/services/animalTasks";
  
- export default function ConsultationPage() {
+ import type { AnimalTaskItem } from "@/types/agenda";
+@@ -25,38 +19,6 @@ import { AgendaTaskFilters } from "@/components/agenda/AgendaTaskFilters";
+ 
+ type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
+ 
+-/* =======================
+- * Visual helpers
+- * ======================= */
 -
-   const params = useParams();
-+  const router = useRouter();
+-function getTaskVisualState(task: AnimalTaskItem) {
+-  if (task.status === "CANCELED") return "canceled";
+-  if (task.status === "DONE") return "done";
+-
+-  if (
+-    task.status === "PLANNED" &&
+-    task.scheduled_at &&
+-    new Date(task.scheduled_at).getTime() < Date.now()
+-  ) {
+-    return "late";
+-  }
+-
+-  return "planned";
+-}
+-
+-const stateStyle: Record<string, string> = {
+-  planned: "bg-white",
+-  late: "bg-amber-50",
+-  done: "bg-green-50",
+-  canceled: "bg-zinc-100",
+-};
+-
+-const statusBadge: Record<string, string> = {
+-  PLANNED: "bg-zinc-100 text-zinc-700",
+-  DONE: "bg-green-100 text-green-800",
+-  CANCELED: "bg-red-100 text-red-800",
+-};
+-
+ /* =======================
+  * Datas (regra única)
+  * ======================= */
+@@ -118,6 +80,17 @@ export default function AnimalAgendaTasksPage() {
+   const [statusFilter, setStatusFilter] =
+     useState<TaskStatusFilter>("PLANNED");
  
-   const consultationId =
-     typeof params.consultationId === "string"
-       ? params.consultationId
-       : params.consultationId?.[0];
- 
-+  const animalId =
-+    typeof params.animalId === "string" ? params.animalId : params.animalId?.[0];
++  /* =======================
++   * novos estados exigidos
++   * ======================= */
 +
-   const [data, setData] = useState<ConsultationDetailsDTO | null>(null);
-   const [loading, setLoading] = useState(true);
-+  const [showProblemForm, setShowProblemForm] = useState(false);
- 
++  const [treatments] = useState<any[]>([]);
++const [selectedTreatment, setSelectedTreatment] =
++  useState<string | undefined>(undefined);
++
++const [selectedSchedule, setSelectedSchedule] =
++  useState<string | undefined>(undefined);
++
    async function load() {
-     if (!consultationId) return;
-@@ -67,6 +70,38 @@ export default function ConsultationPage() {
-         weight={c.weight}
-       />
+     if (!animalId) return;
  
-+      <section className="space-y-3">
-+        <div className="flex items-center justify-between gap-3">
-+          <h3 className="text-xs font-semibold text-zinc-700">
-+            Problemas clínicos
-+          </h3>
+@@ -165,6 +138,9 @@ export default function AnimalAgendaTasksPage() {
+         from={from}
+         to={to}
+         status={statusFilter}
++        treatments={treatments}
++        selectedTreatment={selectedTreatment}
++        selectedSchedule={selectedSchedule}
+         onToggleToday={setTodayOnly}
+         onToggleExpanded={() => setExpanded((v) => !v)}
+         onChangeYear={setYear}
+@@ -172,7 +148,10 @@ export default function AnimalAgendaTasksPage() {
+         onChangeFrom={setFrom}
+         onChangeTo={setTo}
+         onChangeStatus={setStatusFilter}
++        onChangeTreatment={setSelectedTreatment}
++        onChangeSchedule={setSelectedSchedule}
+       />
 +
-+          <button
-+            type="button"
-+            onClick={() => setShowProblemForm((v) => !v)}
-+            className="text-xs text-zinc-700 hover:underline"
-+          >
-+            + Abrir problema
-+          </button>
-+        </div>
-+
-+        {showProblemForm ? (
-+          <ProblemCreateForm
-+            consultationPublicId={c.public_id}
-+            onCancel={() => setShowProblemForm(false)}
-+            onCreated={async (problemPublicId) => {
-+              setShowProblemForm(false);
-+
-+              if (animalId) {
-+                router.push(
-+                  `/dashboard/animals/${animalId}/clinic/problems/${problemPublicId}`
-+                );
-+              }
-+            }}
-+          />
-+        ) : null}
-+      </section>
-+
-       <ConsultationNotesSection
-         consultationPublicId={c.public_id}
-         notes={data.notes}
+       <ul className="space-y-3">
+         {tasks.map((task) => (
+           <AnimalTaskItemCard
+@@ -191,4 +170,4 @@ export default function AnimalAgendaTasksPage() {
+       </ul>
+     </section>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/diffFront.txt b/diffFront.txt
+index 21c31ec..e69de29 100644
+--- a/diffFront.txt
++++ b/diffFront.txt
+@@ -1,750 +0,0 @@
+-diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
+-index 9a33071..841a09f 100644
+---- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
+-+++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
+-@@ -1,9 +1,7 @@
+--// path: src/app/(protected)/dashboard/animals/[animalId]/clinic/consultations/[consultationId]/page.tsx
+--
+- "use client";
+- 
+- import { useEffect, useState } from "react";
+--import { useParams } from "next/navigation";
+-+import { useParams, useRouter } from "next/navigation";
+- 
+- import {
+-   fetchConsultationDetails,
+-@@ -14,18 +12,23 @@ import { ConsultationHeader } from "@/components/animals/clinic/ConsultationHead
+- import { ConsultationSOAP } from "@/components/animals/clinic/ConsultationSOAP";
+- import { ConsultationNotesSection } from "@/components/animals/clinic/ConsultationNotesSection";
+- import { ExamOrderCard } from "@/components/animals/clinic/ExamOrderCard";
+-+import { ProblemCreateForm } from "@/components/animals/clinic/problems/ProblemCreateForm";
+- 
+- export default function ConsultationPage() {
+--
+-   const params = useParams();
+-+  const router = useRouter();
+- 
+-   const consultationId =
+-     typeof params.consultationId === "string"
+-       ? params.consultationId
+-       : params.consultationId?.[0];
+- 
+-+  const animalId =
+-+    typeof params.animalId === "string" ? params.animalId : params.animalId?.[0];
+-+
+-   const [data, setData] = useState<ConsultationDetailsDTO | null>(null);
+-   const [loading, setLoading] = useState(true);
+-+  const [showProblemForm, setShowProblemForm] = useState(false);
+- 
+-   async function load() {
+-     if (!consultationId) return;
+-@@ -67,6 +70,38 @@ export default function ConsultationPage() {
+-         weight={c.weight}
+-       />
+- 
+-+      <section className="space-y-3">
+-+        <div className="flex items-center justify-between gap-3">
+-+          <h3 className="text-xs font-semibold text-zinc-700">
+-+            Problemas clínicos
+-+          </h3>
+-+
+-+          <button
+-+            type="button"
+-+            onClick={() => setShowProblemForm((v) => !v)}
+-+            className="text-xs text-zinc-700 hover:underline"
+-+          >
+-+            + Abrir problema
+-+          </button>
+-+        </div>
+-+
+-+        {showProblemForm ? (
+-+          <ProblemCreateForm
+-+            consultationPublicId={c.public_id}
+-+            onCancel={() => setShowProblemForm(false)}
+-+            onCreated={async (problemPublicId) => {
+-+              setShowProblemForm(false);
+-+
+-+              if (animalId) {
+-+                router.push(
+-+                  `/dashboard/animals/${animalId}/clinic/problems/${problemPublicId}`
+-+                );
+-+              }
+-+            }}
+-+          />
+-+        ) : null}
+-+      </section>
+-+
+-       <ConsultationNotesSection
+-         consultationPublicId={c.public_id}
+-         notes={data.notes}
+-diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
+-index adf57f2..522182f 100644
+---- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
+-+++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
+-@@ -1,4 +1,3 @@
+--// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
+- "use client";
+- 
+- import { ReactNode, useCallback, useEffect, useState } from "react";
+-@@ -43,28 +42,32 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
+-     return <div className="p-6 text-zinc-500">Carregando animal…</div>;
+-   }
+- 
+--const menuItems = [
+--  {
+--    label: "Consultas",
+--    href: `${clinicBase}/consultations`,
+--  },
+--  {
+--    label: "Pedidos",
+--    href: `${clinicBase}/orders`,
+--  },
+--  {
+--    label: "Exames",
+--    href: `${clinicBase}/exams`,
+--  },
+--  {
+--    label: "Medicações",
+--    href: `${clinicBase}/medications`,
+--  },
+--  {
+--    label: "Tratamentos",
+--    href: `${clinicBase}/treatments`,
+--  },
+--];
+-+  const menuItems = [
+-+    {
+-+      label: "Consultas",
+-+      href: `${clinicBase}/consultations`,
+-+    },
+-+    {
+-+      label: "Problemas",
+-+      href: `${clinicBase}/problems`,
+-+    },
+-+    {
+-+      label: "Pedidos",
+-+      href: `${clinicBase}/orders`,
+-+    },
+-+    {
+-+      label: "Exames",
+-+      href: `${clinicBase}/exams`,
+-+    },
+-+    {
+-+      label: "Medicações",
+-+      href: `${clinicBase}/medications`,
+-+    },
+-+    {
+-+      label: "Tratamentos",
+-+      href: `${clinicBase}/treatments`,
+-+    },
+-+  ];
+- 
+-   return (
+-     <section className="mx-auto max-w-5xl px-4 py-6 space-y-10">
+-diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
+-index a61e6e7..7ce505e 100644
+---- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
+-+++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
+-@@ -1,4 +1,3 @@
+--// path: frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
+- "use client";
+- 
+- import Link from "next/link";
+-@@ -20,6 +19,14 @@ export default function AnimalClinicPage() {
+-           <p className="text-xs text-zinc-500">Histórico completo de consultas clínicas</p>
+-         </Link>
+- 
+-+        <Link
+-+          href={`/dashboard/animals/${animalId}/clinic/problems`}
+-+          className="rounded-lg border bg-white px-4 py-3 hover:bg-zinc-50"
+-+        >
+-+          <p className="text-sm font-medium text-zinc-900">Problemas clínicos</p>
+-+          <p className="text-xs text-zinc-500">Acompanhamento longitudinal dos problemas do animal</p>
+-+        </Link>
+-+
+-         <Link
+-           href={`/dashboard/animals/${animalId}/clinic/orders`}
+-           className="rounded-lg border bg-white px-4 py-3 hover:bg-zinc-50"
+-diff --git a/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx b/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
+-index 375e6ab..69e8c61 100644
+---- a/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
+-+++ b/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
+-@@ -5,7 +5,8 @@ import {
+-   createClinicalExamOrder,
+-   listClinicalExamTypes,
+- } from "@/services/clinicalExamOrders";
+--
+-+import { listAnimalClinicalProblems } from "@/services/clinicalProblems";
+-+import { ProblemSelector } from "@/components/animals/clinic/problems/ProblemSelector";
+- import { useModal } from "@/components/ui/modal/ModalProvider";
+- 
+- import type {
+-@@ -15,22 +16,26 @@ import type {
+- 
+- type Props = {
+-   consultationPublicId: string;
+-+  animalPublicId?: string;
+-   onCreated(): Promise<void> | void;
+-   problemIds?: string[];
+- };
+- 
+- export function AnimalExamOrderCreateForm({
+-   consultationPublicId,
+-+  animalPublicId,
+-   onCreated,
+-   problemIds = [],
+- }: Props) {
+--
+-   const { confirm } = useModal();
+- 
+-   const [open, setOpen] = useState(false);
+- 
+-   const [examTypes, setExamTypes] = useState<ClinicalExamTypeItem[]>([]);
+--const [selectedExamTypes, setSelectedExamTypes] = useState<string[]>([""]);
+-+  const [selectedExamTypes, setSelectedExamTypes] = useState<string[]>([""]);
+-+  const [selectedProblemIds, setSelectedProblemIds] = useState<string[]>(problemIds);
+-+
+-+  const [problemOptions, setProblemOptions] = useState<any[]>([]);
+- 
+-   const [justification, setJustification] = useState("");
+-   const [diagnosticHypothesis, setDiagnosticHypothesis] = useState("");
+-@@ -43,109 +48,98 @@ const [selectedExamTypes, setSelectedExamTypes] = useState<string[]>([""]);
+-   const [parametersText, setParametersText] = useState("");
+- 
+-   const [loading, setLoading] = useState(false);
+-+  const [loadingProblems, setLoadingProblems] = useState(false);
+-   const [error, setError] = useState<string | null>(null);
+- 
+-   const parameters = useMemo(() => {
+--
+-     return parametersText
+-       .split(",")
+-       .map((value) => value.trim())
+-       .filter(Boolean);
+--
+-   }, [parametersText]);
+- 
+--
+--
+-   useEffect(() => {
+--
+-     listClinicalExamTypes()
+-       .then((res) => setExamTypes(res.items ?? []))
+-       .catch(() => setExamTypes([]));
+--
+-   }, []);
+- 
+-+useEffect(() => {
+-+  setSelectedProblemIds((prev) => {
+-+    const incoming = problemIds ?? [];
+- 
+-+    if (
+-+      prev.length === incoming.length &&
+-+      prev.every((v, i) => v === incoming[i])
+-+    ) {
+-+      return prev;
+-+    }
+- 
+--  function addExamType() {
+-+    return incoming;
+-+  });
+-+}, [problemIds]);
+- 
+--    setSelectedExamTypes((prev) => [
+--      ...prev,
+--      ""
+--    ]);
+-+  useEffect(() => {
+-+    if (!open || !animalPublicId) return;
+- 
+--  }
+-+    setLoadingProblems(true);
+- 
+-+    listAnimalClinicalProblems(animalPublicId)
+-+      .then((res) => setProblemOptions(res))
+-+      .catch(() => setProblemOptions([]))
+-+      .finally(() => setLoadingProblems(false));
+-+  }, [open, animalPublicId]);
+- 
+-+  function addExamType() {
+-+    setSelectedExamTypes((prev) => [...prev, ""]);
+-+  }
+- 
+-   function updateExamType(index: number, value: string) {
+--
+-     setSelectedExamTypes((prev) => {
+--
+-       const copy = [...prev];
+-       copy[index] = value;
+-       return copy;
+--
+-     });
+--
+-   }
+- 
+--
+--
+--function removeExamType(index: number) {
+--
+--  setSelectedExamTypes((prev) => {
+--
+--    if (prev.length === 1) return prev;
+--
+--    return prev.filter((_, i) => i !== index);
+--
+--  });
+--
+--}
+--
+--
+-+  function removeExamType(index: number) {
+-+    setSelectedExamTypes((prev) => {
+-+      if (prev.length === 1) return prev;
+-+      return prev.filter((_, i) => i !== index);
+-+    });
+-+  }
+- 
+-   async function submit() {
+--
+-     setError(null);
+- 
+--    const examTypesFiltered =
+--      selectedExamTypes.filter(Boolean);
+-+    const examTypesFiltered = selectedExamTypes.filter(Boolean);
+- 
+-     if (examTypesFiltered.length === 0) {
+--
+-       setError("Adicione pelo menos um exame.");
+-       return;
+--
+-     }
+- 
+-     if (!justification.trim()) {
+--
+-       setError("A justificativa clínica é obrigatória.");
+-       return;
+--
+-     }
+- 
+-     try {
+--
+-       setLoading(true);
+- 
+--      await createClinicalExamOrder(
+--        consultationPublicId,
+--        {
+--          exam_types: examTypesFiltered,
+--          justification: justification.trim(),
+--          diagnostic_hypothesis:
+--            diagnosticHypothesis.trim() || null,
+--          notes: notes.trim() || null,
+--          priority,
+--          laboratory: laboratory.trim() || null,
+--          parameters,
+--          problem_ids: problemIds,
+--        }
+--      );
+-+      await createClinicalExamOrder(consultationPublicId, {
+-+        exam_types: examTypesFiltered,
+-+        justification: justification.trim(),
+-+        diagnostic_hypothesis: diagnosticHypothesis.trim() || null,
+-+        notes: notes.trim() || null,
+-+        priority,
+-+        laboratory: laboratory.trim() || null,
+-+        parameters,
+-+        problem_ids: selectedProblemIds,
+-+      });
+- 
+-       setSelectedExamTypes([""]);
+-+      setSelectedProblemIds(problemIds);
+-       setJustification("");
+-       setDiagnosticHypothesis("");
+-       setNotes("");
+-@@ -163,23 +157,14 @@ function removeExamType(index: number) {
+-         confirmLabel: "OK",
+-         hideCancel: true,
+-       });
+--
+-     } catch (e: any) {
+--
+-       setError(e?.message || "Erro ao criar pedido.");
+--
+-     } finally {
+--
+-       setLoading(false);
+--
+-     }
+--
+-   }
+- 
+--
+--
+-   if (!open) {
+--
+-     return (
+-       <button
+-         type="button"
+-@@ -189,17 +174,11 @@ function removeExamType(index: number) {
+-         + Solicitar exame
+-       </button>
+-     );
+--
+-   }
+- 
+--
+--
+-   return (
+--
+-     <div className="rounded-lg border bg-white p-4 space-y-4">
+--
+-       <div className="flex items-center justify-between">
+--
+-         <div>
+-           <p className="text-sm font-semibold text-zinc-900">
+-             Novo pedido de exame
+-@@ -217,25 +196,12 @@ function removeExamType(index: number) {
+-         >
+-           Cancelar
+-         </button>
+--
+-       </div>
+- 
+--
+--
+--      {error && (
+--        <p className="text-xs text-red-600">
+--          {error}
+--        </p>
+--      )}
+--
+--
+--
+--      {/* EXAMES */}
+-+      {error && <p className="text-xs text-red-600">{error}</p>}
+- 
+-       <div className="space-y-2">
+--
+-         <div className="flex items-center justify-between">
+--
+-           <label className="text-xs font-medium text-zinc-700">
+-             Exames solicitados
+-           </label>
+-@@ -247,41 +213,22 @@ function removeExamType(index: number) {
+-           >
+-             + Adicionar exame
+-           </button>
+--
+-         </div>
+- 
+--
+--
+-         {selectedExamTypes.map((value, index) => (
+--
+--          <div
+--            key={index}
+--            className="flex gap-2"
+--          >
+--
+-+          <div key={index} className="flex gap-2">
+-             <select
+-               className="w-full rounded border px-3 py-2 text-sm"
+-               value={value}
+--              onChange={(e) =>
+--                updateExamType(index, e.target.value)
+--              }
+-+              onChange={(e) => updateExamType(index, e.target.value)}
+-             >
+--
+--              <option value="">
+--                Selecione o exame
+--              </option>
+-+              <option value="">Selecione o exame</option>
+- 
+-               {examTypes.map((type) => (
+--
+--                <option
+--                  key={type.public_id}
+--                  value={type.public_id}
+--                >
+-+                <option key={type.public_id} value={type.public_id}>
+-                   {type.name} — {type.category.name}
+-                 </option>
+--
+-               ))}
+--
+-             </select>
+- 
+-             <button
+-@@ -291,19 +238,29 @@ function removeExamType(index: number) {
+-             >
+-               remover
+-             </button>
+--
+-           </div>
+--
+-         ))}
+--
+-       </div>
+- 
+-+      <div className="space-y-2">
+-+        <label className="text-xs font-medium text-zinc-700">
+-+          Problemas relacionados
+-+        </label>
+- 
+--
+--      {/* JUSTIFICATIVA */}
+-+        {loadingProblems ? (
+-+          <div className="text-xs text-zinc-500">
+-+            Carregando problemas…
+-+          </div>
+-+        ) : (
+-+          <ProblemSelector
+-+            items={problemOptions}
+-+            selected={selectedProblemIds}
+-+            onChange={setSelectedProblemIds}
+-+          />
+-+        )}
+-+      </div>
+- 
+-       <div className="space-y-1">
+--
+-         <label className="text-xs font-medium text-zinc-700">
+-           Justificativa clínica
+-         </label>
+-@@ -311,20 +268,12 @@ function removeExamType(index: number) {
+-         <textarea
+-           className="w-full rounded border px-3 py-2 text-sm"
+-           value={justification}
+--          onChange={(e) =>
+--            setJustification(e.target.value)
+--          }
+-+          onChange={(e) => setJustification(e.target.value)}
+-           rows={3}
+-         />
+--
+-       </div>
+- 
+--
+--
+--      {/* HIPÓTESE */}
+--
+-       <div className="space-y-1">
+--
+-         <label className="text-xs font-medium text-zinc-700">
+-           Hipótese diagnóstica
+-         </label>
+-@@ -332,20 +281,12 @@ function removeExamType(index: number) {
+-         <textarea
+-           className="w-full rounded border px-3 py-2 text-sm"
+-           value={diagnosticHypothesis}
+--          onChange={(e) =>
+--            setDiagnosticHypothesis(e.target.value)
+--          }
+-+          onChange={(e) => setDiagnosticHypothesis(e.target.value)}
+-           rows={2}
+-         />
+--
+-       </div>
+- 
+--
+--
+--      {/* OBSERVAÇÃO */}
+--
+-       <div className="space-y-1">
+--
+-         <label className="text-xs font-medium text-zinc-700">
+-           Observação clínica
+-         </label>
+-@@ -353,22 +294,13 @@ function removeExamType(index: number) {
+-         <textarea
+-           className="w-full rounded border px-3 py-2 text-sm"
+-           value={notes}
+--          onChange={(e) =>
+--            setNotes(e.target.value)
+--          }
+-+          onChange={(e) => setNotes(e.target.value)}
+-           rows={2}
+-         />
+--
+-       </div>
+- 
+--
+--
+--      {/* PRIORIDADE + LAB */}
+--
+-       <div className="grid grid-cols-2 gap-3">
+--
+-         <div className="space-y-1">
+--
+-           <label className="text-xs font-medium text-zinc-700">
+-             Prioridade
+-           </label>
+-@@ -377,27 +309,15 @@ function removeExamType(index: number) {
+-             className="w-full rounded border px-3 py-2 text-sm"
+-             value={priority}
+-             onChange={(e) =>
+--              setPriority(
+--                e.target.value as ClinicalExamOrderPriority
+--              )
+-+              setPriority(e.target.value as ClinicalExamOrderPriority)
+-             }
+-           >
+--            <option value="ROUTINE">
+--              Rotina
+--            </option>
+--
+--            <option value="URGENT">
+--              Urgente
+--            </option>
+--
+-+            <option value="ROUTINE">Rotina</option>
+-+            <option value="URGENT">Urgente</option>
+-           </select>
+--
+-         </div>
+- 
+--
+--
+-         <div className="space-y-1">
+--
+-           <label className="text-xs font-medium text-zinc-700">
+-             Laboratório
+-           </label>
+-@@ -405,21 +325,12 @@ function removeExamType(index: number) {
+-           <input
+-             className="w-full rounded border px-3 py-2 text-sm"
+-             value={laboratory}
+--            onChange={(e) =>
+--              setLaboratory(e.target.value)
+--            }
+-+            onChange={(e) => setLaboratory(e.target.value)}
+-           />
+--
+-         </div>
+--
+-       </div>
+- 
+--
+--
+--      {/* BOTÕES */}
+--
+-       <div className="flex justify-end gap-2 pt-2">
+--
+-         <button
+-           type="button"
+-           onClick={() => setOpen(false)}
+-@@ -436,11 +347,7 @@ function removeExamType(index: number) {
+-         >
+-           Registrar pedido
+-         </button>
+--
+-       </div>
+--
+-     </div>
+--
+-   );
+--
+--}
+-\ No newline at end of file
+-+}
+-diff --git a/src/components/animals/clinic/ConsultationCard.tsx b/src/components/animals/clinic/ConsultationCard.tsx
+-index 81b604e..27dac1d 100644
+---- a/src/components/animals/clinic/ConsultationCard.tsx
+-+++ b/src/components/animals/clinic/ConsultationCard.tsx
+-@@ -4,9 +4,11 @@ import { useState } from "react";
+- import { ConsultationHeader } from "./ConsultationHeader";
+- import { ConsultationFormFields } from "./ConsultationFormFields";
+- import { AnimalExamOrderCreateForm } from "./AnimalExamOrderCreateForm";
+-+import { ProblemCreateForm } from "@/components/animals/clinic/problems/ProblemCreateForm";
+- import { useConsultationExamOrders } from "@/components/animals/clinic/hooks/useConsultationExamOrders";
+- import { ExamOrderCard } from "./ExamOrderCard";
+- import { ConsultationNotesSection } from "./ConsultationNotesSection";
+-+import { useRouter } from "next/navigation";
+- 
+- type Props = {
+-   consultation: any;
+-@@ -14,7 +16,9 @@ type Props = {
+- };
+- 
+- export function ConsultationCard({ consultation, animalPublicId }: Props) {
+-+  const router = useRouter();
+-   const [open, setOpen] = useState(false);
+-+  const [showProblemForm, setShowProblemForm] = useState(false);
+- 
+-   const {
+-     items: examOrders,
+-@@ -66,6 +70,35 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
+-             onCreated={() => {}}
+-           />
+- 
+-+          <section className="space-y-3">
+-+            <div className="flex items-center justify-between gap-3">
+-+              <h3 className="text-xs font-semibold text-zinc-700">
+-+                Problemas clínicos
+-+              </h3>
+-+
+-+              <button
+-+                type="button"
+-+                onClick={() => setShowProblemForm((v) => !v)}
+-+                className="text-xs text-zinc-700 hover:underline"
+-+              >
+-+                + Abrir problema
+-+              </button>
+-+            </div>
+-+
+-+            {showProblemForm ? (
+-+              <ProblemCreateForm
+-+                consultationPublicId={consultation.public_id}
+-+                onCancel={() => setShowProblemForm(false)}
+-+                onCreated={async (problemPublicId) => {
+-+                  setShowProblemForm(false);
+-+                  router.push(
+-+                    `/dashboard/animals/${animalPublicId}/clinic/problems/${problemPublicId}`
+-+                  );
+-+                }}
+-+              />
+-+            ) : null}
+-+          </section>
+-+
+-           <section className="space-y-3">
+-             <div className="flex items-center justify-between gap-3">
+-               <h3 className="text-xs font-semibold text-zinc-700">
+-@@ -74,6 +107,7 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
+- 
+-               <AnimalExamOrderCreateForm
+-                 consultationPublicId={consultation.public_id}
+-+                animalPublicId={animalPublicId}
+-                 onCreated={reloadExamOrders}
+-               />
+-             </div>
+-diff --git a/src/services/animalConsultations.ts b/src/services/animalConsultations.ts
+-index c585f71..bbc7ec6 100644
+---- a/src/services/animalConsultations.ts
+-+++ b/src/services/animalConsultations.ts
+-@@ -84,13 +84,14 @@ export async function fetchAnimalConsultations(
+- export async function fetchConsultationDetails(
+-   consultationPublicId: string
+- ): Promise<ConsultationDetailsDTO> {
+-+
+-   const res: any = await http(
+-     `/api/v1/consultations/${consultationPublicId}`
+-   );
+- 
+--  const c = res?.consultations?.[0];
+-+  const c = res.consultation;
+- 
+--  if (!c) {
+-+  if (!c || !c.public_id) {
+-     throw new Error("Consulta não encontrada.");
+-   }
+- 
+-@@ -111,8 +112,7 @@ export async function fetchConsultationDetails(
+-       created_by: c.created_by ?? null,
+-     },
+- 
+--    notes: c.notes ?? [],
+--
+-+    notes: res.notes ?? [],
+-     exam_orders: res.exam_orders ?? [],
+-   };
+- }
 diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
-index adf57f2..522182f 100644
+index 522182f..732d9b7 100644
 --- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
 +++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
-@@ -1,4 +1,3 @@
--// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
+@@ -1,3 +1,5 @@
++// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/layout.tsx
++
  "use client";
  
  import { ReactNode, useCallback, useEffect, useState } from "react";
-@@ -43,28 +42,32 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
-     return <div className="p-6 text-zinc-500">Carregando animal…</div>;
-   }
+@@ -10,23 +12,60 @@ import { revokeTutorFromAnimal } from "@/services/animalTutors";
+ import { AnimalHeader } from "@/components/animals/AnimalHeader";
+ import { AnimalSectionMenu } from "@/components/animals/AnimalSectionMenu";
  
--const menuItems = [
--  {
--    label: "Consultas",
--    href: `${clinicBase}/consultations`,
--  },
--  {
--    label: "Pedidos",
--    href: `${clinicBase}/orders`,
--  },
--  {
--    label: "Exames",
--    href: `${clinicBase}/exams`,
--  },
--  {
--    label: "Medicações",
--    href: `${clinicBase}/medications`,
--  },
--  {
--    label: "Tratamentos",
--    href: `${clinicBase}/treatments`,
--  },
--];
-+  const menuItems = [
-+    {
-+      label: "Consultas",
-+      href: `${clinicBase}/consultations`,
-+    },
-+    {
-+      label: "Problemas",
-+      href: `${clinicBase}/problems`,
-+    },
-+    {
-+      label: "Pedidos",
-+      href: `${clinicBase}/orders`,
-+    },
-+    {
-+      label: "Exames",
-+      href: `${clinicBase}/exams`,
-+    },
-+    {
-+      label: "Medicações",
-+      href: `${clinicBase}/medications`,
-+    },
-+    {
-+      label: "Tratamentos",
-+      href: `${clinicBase}/treatments`,
-+    },
-+  ];
++type ClinicLayoutAnimalDTO = {
++  public_id: string;
++  call_name?: string | null;
++  photo?: unknown;
++  my_role?: string | null;
++  permissions?: {
++    edit?: boolean;
++    invite?: boolean;
++    clinic?: boolean;
++    agenda?: boolean;
++    files?: boolean;
++    tutors?: boolean;
++    organizations?: boolean;
++    history?: boolean;
++  } | null;
++  tutors?: {
++    primary?: {
++      person_public_id: string;
++      name: string;
++    } | null;
++    invited?: Array<{
++      person_public_id: string;
++      name: string;
++    }>;
++  } | null;
++  [key: string]: unknown;
++};
++
+ export default function ClinicLayout({ children }: { children: ReactNode }) {
+   const pathname = usePathname();
+   const params = useParams();
+   const animalId = params?.animalId as string;
  
-   return (
-     <section className="mx-auto max-w-5xl px-4 py-6 space-y-10">
-diff --git a/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx b/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
-index a61e6e7..7ce505e 100644
---- a/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
-+++ b/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
-@@ -1,4 +1,3 @@
--// path: frontend/src/app/(protected)/dashboard/animals/[animalId]/clinic/page.tsx
+-  const [animal, setAnimal] = useState<any>(null);
++  const [animal, setAnimal] = useState<ClinicLayoutAnimalDTO | null>(null);
+   const [loading, setLoading] = useState(true);
+ 
+   const animalBase = `/dashboard/animals/${animalId}`;
+   const clinicBase = `${animalBase}/clinic`;
+ 
+   const reloadAnimal = useCallback(async () => {
+-    if (!animalId) return;
++    if (!animalId) {
++      setAnimal(null);
++      setLoading(false);
++      return;
++    }
++
+     setLoading(true);
+-    const data = await getAnimal(animalId);
+-    setAnimal(data);
+-    setLoading(false);
++
++    try {
++      const data = await getAnimal<ClinicLayoutAnimalDTO>(animalId);
++      setAnimal(data);
++    } finally {
++      setLoading(false);
++    }
+   }, [animalId]);
+ 
+   useEffect(() => {
+diff --git a/src/app/(protected)/dashboard/animals/[animalId]/page.tsx b/src/app/(protected)/dashboard/animals/[animalId]/page.tsx
+index a499eed..80193e6 100644
+--- a/src/app/(protected)/dashboard/animals/[animalId]/page.tsx
++++ b/src/app/(protected)/dashboard/animals/[animalId]/page.tsx
+@@ -1,3 +1,5 @@
++// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/page.tsx
++
  "use client";
  
- import Link from "next/link";
-@@ -20,6 +19,14 @@ export default function AnimalClinicPage() {
-           <p className="text-xs text-zinc-500">Histórico completo de consultas clínicas</p>
-         </Link>
+ import { useEffect, useState, useCallback } from "react";
+@@ -11,18 +13,55 @@ import { AnimalSectionMenu } from "@/components/animals/AnimalSectionMenu";
+ import { AnimalBasicForm } from "@/components/animals/AnimalBasicForm";
+ import { AnimalParentsForm } from "@/components/animals/AnimalParentsForm";
  
-+        <Link
-+          href={`/dashboard/animals/${animalId}/clinic/problems`}
-+          className="rounded-lg border bg-white px-4 py-3 hover:bg-zinc-50"
-+        >
-+          <p className="text-sm font-medium text-zinc-900">Problemas clínicos</p>
-+          <p className="text-xs text-zinc-500">Acompanhamento longitudinal dos problemas do animal</p>
-+        </Link>
++type AnimalPageDTO = {
++  public_id: string;
++  call_name?: string | null;
++  photo?: unknown;
++  my_role?: string | null;
++  permissions?: {
++    edit?: boolean;
++    invite?: boolean;
++    clinic?: boolean;
++    agenda?: boolean;
++    files?: boolean;
++    tutors?: boolean;
++    organizations?: boolean;
++    history?: boolean;
++  } | null;
++  tutors?: {
++    primary?: {
++      person_public_id: string;
++      name: string;
++    } | null;
++    invited?: Array<{
++      person_public_id: string;
++      name: string;
++    }>;
++  } | null;
++  [key: string]: unknown;
++};
 +
-         <Link
-           href={`/dashboard/animals/${animalId}/clinic/orders`}
-           className="rounded-lg border bg-white px-4 py-3 hover:bg-zinc-50"
-diff --git a/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx b/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
-index 375e6ab..69e8c61 100644
---- a/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
-+++ b/src/components/animals/clinic/AnimalExamOrderCreateForm.tsx
-@@ -5,7 +5,8 @@ import {
-   createClinicalExamOrder,
-   listClinicalExamTypes,
- } from "@/services/clinicalExamOrders";
--
-+import { listAnimalClinicalProblems } from "@/services/clinicalProblems";
-+import { ProblemSelector } from "@/components/animals/clinic/problems/ProblemSelector";
- import { useModal } from "@/components/ui/modal/ModalProvider";
+ export default function AnimalPage() {
+   const { animalId } = useParams<{ animalId: string }>();
  
- import type {
-@@ -15,22 +16,26 @@ import type {
+-  const [animal, setAnimal] = useState<any>(null);
++  const [animal, setAnimal] = useState<AnimalPageDTO | null>(null);
+   const [loading, setLoading] = useState(true);
  
- type Props = {
-   consultationPublicId: string;
-+  animalPublicId?: string;
-   onCreated(): Promise<void> | void;
-   problemIds?: string[];
- };
- 
- export function AnimalExamOrderCreateForm({
-   consultationPublicId,
-+  animalPublicId,
-   onCreated,
-   problemIds = [],
- }: Props) {
--
-   const { confirm } = useModal();
- 
-   const [open, setOpen] = useState(false);
- 
-   const [examTypes, setExamTypes] = useState<ClinicalExamTypeItem[]>([]);
--const [selectedExamTypes, setSelectedExamTypes] = useState<string[]>([""]);
-+  const [selectedExamTypes, setSelectedExamTypes] = useState<string[]>([""]);
-+  const [selectedProblemIds, setSelectedProblemIds] = useState<string[]>(problemIds);
+   const reloadAnimal = useCallback(async () => {
+-    if (!animalId) return;
++    if (!animalId) {
++      setAnimal(null);
++      setLoading(false);
++      return;
++    }
 +
-+  const [problemOptions, setProblemOptions] = useState<any[]>([]);
+     setLoading(true);
+-    const data = await getAnimal(animalId);
+-    setAnimal(data);
+-    setLoading(false);
++
++    try {
++      const data = await getAnimal<AnimalPageDTO>(animalId);
++      setAnimal(data);
++    } finally {
++      setLoading(false);
++    }
+   }, [animalId]);
  
-   const [justification, setJustification] = useState("");
-   const [diagnosticHypothesis, setDiagnosticHypothesis] = useState("");
-@@ -43,109 +48,98 @@ const [selectedExamTypes, setSelectedExamTypes] = useState<string[]>([""]);
-   const [parametersText, setParametersText] = useState("");
- 
-   const [loading, setLoading] = useState(false);
-+  const [loadingProblems, setLoadingProblems] = useState(false);
-   const [error, setError] = useState<string | null>(null);
- 
-   const parameters = useMemo(() => {
--
-     return parametersText
-       .split(",")
-       .map((value) => value.trim())
-       .filter(Boolean);
--
-   }, [parametersText]);
- 
--
--
    useEffect(() => {
+@@ -45,11 +84,13 @@ export default function AnimalPage() {
+ 
+       <AnimalSectionMenu animalId={animal.public_id} />
+ 
+-      {/* VISÃO GERAL = FORMULÁRIOS */}
+-      <AnimalBasicForm
+-        publicId={animal.public_id}
+-        initialData={animal}
+-      />
++<AnimalBasicForm
++  publicId={animal.public_id}
++  initialData={{
++    ...animal,
++    call_name: animal.call_name ?? undefined,
++  }}
++/>
+ 
+       <AnimalParentsForm
+         publicId={animal.public_id}
+@@ -58,4 +99,4 @@ export default function AnimalPage() {
+       />
+     </section>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/src/app/(protected)/dashboard/animals/animals-list.tsx b/src/app/(protected)/dashboard/animals/animals-list.tsx
+index ed55c97..204cd44 100644
+--- a/src/app/(protected)/dashboard/animals/animals-list.tsx
++++ b/src/app/(protected)/dashboard/animals/animals-list.tsx
+@@ -1,29 +1,29 @@
++// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/animals-list.tsx
++
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ import Link from "next/link";
+ import { fetchAnimals, AnimalListItem } from "@/services/animals";
+ import { AnimalPhoto } from "@/components/animals/AnimalPhoto";
 -
-     listClinicalExamTypes()
-       .then((res) => setExamTypes(res.items ?? []))
-       .catch(() => setExamTypes([]));
+ import { CopyId } from "@/components/dashboard/CopyId";
+ 
 -
+-
+ export default function AnimalsList() {
+   const [animals, setAnimals] = useState<AnimalListItem[]>([]);
+   const [loading, setLoading] = useState(true);
+ 
+   useEffect(() => {
+-    let mounted = true;
++    let isCancelled = false;
+ 
+     async function load() {
+       try {
+         const list = await fetchAnimals();
+-        if (mounted) {
++
++        if (!isCancelled) {
+           setAnimals(list);
+         }
+       } finally {
+-        if (mounted) {
++        if (!isCancelled) {
+           setLoading(false);
+         }
+       }
+@@ -32,7 +32,7 @@ export default function AnimalsList() {
+     load();
+ 
+     return () => {
+-      mounted = false;
++      isCancelled = true;
+     };
    }, []);
  
-+useEffect(() => {
-+  setSelectedProblemIds((prev) => {
-+    const incoming = problemIds ?? [];
+@@ -59,53 +59,44 @@ export default function AnimalsList() {
+           key={a.public_id}
+           className="flex items-center justify-between gap-3 px-4 py-3"
+         >
+-          <div className="flex items-center gap-3 min-w-0">
+-            {/* FOTO DO ANIMAL — FLUXO CANÔNICO */}
+-              <div className="h-10 w-10 shrink-0">
+-                <AnimalPhoto
+-                  size="sm"
+-                  alt={a.call_name ?? a.public_id}
+-                  photo={{
+-                    read_url: `/api/v1/animals/${a.public_id}/photo/read`,
+-                  }}
+-                />
++          <div className="flex min-w-0 items-center gap-3">
++            <div className="h-10 w-10 shrink-0">
++              <AnimalPhoto
++                size="sm"
++                alt={a.call_name ?? a.public_id}
++                photo={{
++                  read_url: `/api/v1/animals/${a.public_id}/photo/read`,
++                }}
++              />
++            </div>
++
++            <div className="min-w-0 space-y-0.5">
++              <div className="flex min-w-0 items-center gap-2">
++                <div className="truncate font-semibold">
++                  {a.call_name ?? "Sem nome"}
++                </div>
++
++                {a.type && (
++                  <span className="text-xs font-medium uppercase text-zinc-500">
++                    {a.type}
++                  </span>
++                )}
++
++                {a.my_role === "invited_tutor" && (
++                  <span
++                    title="Você é tutor convidado"
++                    className="cursor-default text-xs text-zinc-400"
++                  >
++                    🤝
++                  </span>
++                )}
+               </div>
  
-+    if (
-+      prev.length === incoming.length &&
-+      prev.every((v, i) => v === incoming[i])
-+    ) {
-+      return prev;
-+    }
+-
+-                  <div className="min-w-0 space-y-0.5">
+-                    {/* Linha 1 — Nome + Tipo + Papel */}
+-                    <div className="flex items-center gap-2 min-w-0">
+-                      <div className="font-semibold truncate">
+-                        {a.call_name ?? "Sem nome"}
+-                      </div>
+-
+-                      {a.type && (
+-                        <span className="text-xs font-medium uppercase text-zinc-500">
+-                          {a.type}
+-                        </span>
+-                      )}
+-
+-                      {a.my_role === "invited_tutor" && (
+-                        <span
+-                          title="Você é tutor convidado"
+-                          className="text-xs text-zinc-400 cursor-default"
+-                        >
+-                          🤝
+-                        </span>
+-                      )}
+-                    </div>
+-
+-                    {/* Linha 2 — ID + copiar */}
+-                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+-                      <span className="font-mono truncate">{a.public_id}</span>
+-                      <CopyId id={a.public_id} />
+-                    </div>
+-                  </div>
+-
+-
+-
+-
+-
++              <div className="flex items-center gap-2 text-xs text-zinc-500">
++                <span className="truncate font-mono">{a.public_id}</span>
++                <CopyId id={a.public_id} />
++              </div>
++            </div>
+           </div>
  
--  function addExamType() {
-+    return incoming;
-+  });
-+}, [problemIds]);
+           <Link
+@@ -118,5 +109,4 @@ export default function AnimalsList() {
+       ))}
+     </ul>
+   );
+-}
+-
++}
+\ No newline at end of file
+diff --git a/src/components/agenda/AnimalTaskItemCard.tsx b/src/components/agenda/AnimalTaskItemCard.tsx
+index 7168277..0fb8667 100644
+--- a/src/components/agenda/AnimalTaskItemCard.tsx
++++ b/src/components/agenda/AnimalTaskItemCard.tsx
+@@ -1,10 +1,15 @@
+ "use client";
  
--    setSelectedExamTypes((prev) => [
--      ...prev,
--      ""
--    ]);
-+  useEffect(() => {
-+    if (!open || !animalPublicId) return;
+-// path: frontend/src/components/agenda/AnimalTaskItemCard.tsx
+-
+ import type { AnimalTaskItem } from "@/types/agenda";
+ import { useTaskActions } from "@/hooks/useTaskActions";
  
++import { AnimalTaskHeader } from "./task/AnimalTaskHeader";
++import { AnimalTaskExpanded } from "./task/AnimalTaskExpanded";
++import { AnimalTaskActions } from "./task/AnimalTaskActions";
++
++import { getTaskVisualState } from "@/utils/tasks/task-status";
++import { formatDateTime } from "@/utils/datetime/formatDateTime";
++
+ type Props = {
+   animalId: string;
+   task: AnimalTaskItem;
+@@ -13,62 +18,19 @@ type Props = {
+   onReload(): Promise<void>;
+ };
+ 
+-function getTaskVisualState(task: AnimalTaskItem) {
+-  if (task.status === "CANCELED") return "canceled";
+-  if (task.status === "DONE") return "done";
+-
+-  if (
+-    task.status === "PLANNED" &&
+-    task.scheduled_at &&
+-    new Date(task.scheduled_at).getTime() < Date.now()
+-  ) {
+-    return "late";
 -  }
-+    setLoadingProblems(true);
++type TaskVisualState =
++  | "planned"
++  | "late"
++  | "done"
++  | "canceled";
  
-+    listAnimalClinicalProblems(animalPublicId)
-+      .then((res) => setProblemOptions(res))
-+      .catch(() => setProblemOptions([]))
-+      .finally(() => setLoadingProblems(false));
-+  }, [open, animalPublicId]);
+-  return "planned";
+-}
+-
+-const stateStyle: Record<string, string> = {
++const stateStyle: Record<TaskVisualState, string> = {
+   planned: "bg-white",
+   late: "bg-amber-50",
+   done: "bg-green-50",
+   canceled: "bg-zinc-100",
+ };
  
-+  function addExamType() {
-+    setSelectedExamTypes((prev) => [...prev, ""]);
-+  }
+-const statusBadge: Record<string, string> = {
+-  PLANNED: "bg-zinc-100 text-zinc-700",
+-  DONE: "bg-green-100 text-green-800",
+-  CANCELED: "bg-red-100 text-red-800",
+-};
+-
+-function mapActionLabel(action: string) {
+-  switch (action) {
+-    case "completed":
+-      return "Concluída";
+-    case "canceled":
+-      return "Cancelada";
+-    case "reopened":
+-      return "Reaberta";
+-    default:
+-      return action;
+-  }
+-}
+-
+-function mapSourceLabel(source?: string | null) {
+-  if (!source) return null;
+-
+-  switch (source) {
+-    case "TREATMENT":
+-      return "Tratamento";
+-    case "SYSTEM":
+-      return "Sistema";
+-    case "MANUAL":
+-      return "Manual";
+-    default:
+-      return source;
+-  }
+-}
+-
+ export function AnimalTaskItemCard({
+   animalId,
+   task,
+@@ -76,48 +38,33 @@ export function AnimalTaskItemCard({
+   onToggleExpand,
+   onReload,
+ }: Props) {
+-  const visualState = getTaskVisualState(task);
++  const visualState: TaskVisualState =
++    getTaskVisualState(task);
++
+   const rc = task.recurrence_context;
+-  const isTreatment = task.source === "TREATMENT";
  
-   function updateExamType(index: number, value: string) {
--
-     setSelectedExamTypes((prev) => {
--
-       const copy = [...prev];
-       copy[index] = value;
-       return copy;
--
-     });
--
-   }
+-  const { done, cancel, reopen, cancelRecurrence } = useTaskActions(
+-    animalId,
+-    task.id,
+-    onReload
+-  );
++  const {
++    done,
++    cancel,
++    reopen,
++    cancelRecurrence,
++  } = useTaskActions(animalId, task.id, onReload);
  
+   return (
+     <li
+       onClick={onToggleExpand}
+-      className={`rounded-md border px-4 py-3 space-y-2 cursor-pointer ${stateStyle[visualState]}`}
++      className={`rounded-md border px-4 py-3 space-y-2 cursor-pointer ${
++        stateStyle[visualState] ?? "bg-white"
++      }`}
+     >
+-      {/* HEADER */}
+-      <div className="flex justify-between items-start gap-3">
+-        <div className="flex items-center gap-2 flex-wrap">
+-          <p className="font-medium text-zinc-900">{task.title}</p>
+-          
+-{isTreatment && (
+-  <span className="inline-flex items-center rounded-md bg-blue-100 text-blue-900 px-2.5 py-1 text-xs font-semibold border border-blue-300">
+-    🏥
+-  </span>
+-)}
+-        </div>
 -
+-        <span
+-          className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[task.status]}`}
+-        >
+-          {task.status}
+-        </span>
+-      </div>
++      <AnimalTaskHeader task={task} />
+ 
+-      {/* DESCRIÇÃO */}
+       {task.description && (
+         <p className="text-sm text-zinc-800 whitespace-pre-line">
+           {task.description}
+         </p>
+       )}
+ 
+-      {/* RECORRÊNCIA */}
+       {rc?.index && rc?.total && (
+         <p className="text-xs text-zinc-500 flex items-center gap-2">
+           <span>
+@@ -137,118 +84,24 @@ export function AnimalTaskItemCard({
+         </p>
+       )}
+ 
+-      {/* DATA */}
+       <p className="text-xs text-zinc-500">
+-        {task.scheduled_at
+-          ? new Date(task.scheduled_at).toLocaleString()
+-          : "Sem data"}
++        {formatDateTime(task.scheduled_at)}
+       </p>
+ 
+-      {/* DETALHES EXPANDIDOS */}
+       {expanded && (
+-        <div className="border-t pt-3 text-xs text-zinc-600 space-y-1">
+-          {/* IDs técnicos de tratamento */}
+-          {isTreatment && (
+-            <div className="pt-1 space-y-1 text-zinc-500">
+-              {task.treatment_public_id && (
+-                <p>
+-                  <strong>Tratamento:</strong>{" "}
+-                  <span className="font-mono">
+-                    {task.treatment_public_id}
+-                  </span>
+-                </p>
+-              )}
 -
--function removeExamType(index: number) {
+-              {task.treatment_schedule_public_id && (
+-                <p>
+-                  <strong>Medicação:</strong>{" "}
+-                  <span className="font-mono">
+-                    {task.treatment_schedule_public_id}
+-                  </span>
+-                </p>
+-              )}
+-            </div>
+-          )}
 -
--  setSelectedExamTypes((prev) => {
+-          <p>
+-            <strong>Criada em:</strong>{" "}
+-            {new Date(task.created_at).toLocaleString()}
+-          </p>
 -
--    if (prev.length === 1) return prev;
+-          <p>
+-            <strong>Criada por:</strong> {task.created_by.name}
+-          </p>
 -
--    return prev.filter((_, i) => i !== index);
+-          {task.last_action && (
+-            <>
+-              <p className="pt-1">
+-                <strong>Última ação:</strong>{" "}
+-                {mapActionLabel(task.last_action.action)}
+-              </p>
 -
+-              {task.last_action.by?.name && (
+-                <p>
+-                  <strong>Por:</strong> {task.last_action.by.name}
+-                </p>
+-              )}
+-
+-              <p>
+-                <strong>Em:</strong>{" "}
+-                {new Date(task.last_action.at).toLocaleString()}
+-              </p>
+-
+-              {task.last_action.comment && (
+-                <p className="italic text-zinc-500">
+-                  “{task.last_action.comment}”
+-                </p>
+-              )}
+-
+-              {task.last_action.source &&
+-                task.last_action.source !== "MANUAL" && (
+-                  <p className="text-zinc-500">
+-                    <strong>Origem:</strong>{" "}
+-                    {mapSourceLabel(task.last_action.source)}
+-                  </p>
+-                )}
+-            </>
+-          )}
+-        </div>
++        <AnimalTaskExpanded task={task} />
+       )}
+ 
+-      {/* ACTIONS */}
+       <div
+         className="flex gap-3 text-xs"
+         onClick={(e) => e.stopPropagation()}
+       >
+-        {task.status === "PLANNED" && (
+-          <>
+-            <button
+-              type="button"
+-              onClick={() => done()}
+-              className="text-green-700 hover:underline"
+-            >
+-              ✔ Feita
+-            </button>
+-
+-            <button
+-              type="button"
+-              onClick={() => cancel()}
+-              className="text-red-700 hover:underline"
+-            >
+-              ✖ Cancelar tarefa
+-            </button>
+-          </>
+-        )}
+-
+-        {(task.status === "DONE" || task.status === "CANCELED") && (
+-          <button
+-            type="button"
+-            onClick={() => reopen()}
+-            className="text-amber-700 hover:underline"
+-          >
+-            ↺ Reabrir
+-          </button>
+-        )}
++        <AnimalTaskActions
++          status={task.status}
++          done={done}
++          cancel={cancel}
++          reopen={reopen}
++        />
+       </div>
+     </li>
+   );
+diff --git a/src/components/agenda/RecurrenceBuilder.tsx b/src/components/agenda/RecurrenceBuilder.tsx
+index 90c6edd..1de1220 100644
+--- a/src/components/agenda/RecurrenceBuilder.tsx
++++ b/src/components/agenda/RecurrenceBuilder.tsx
+@@ -1,40 +1,19 @@
+-// path: frontend/src/components/agenda/RecurrenceBuilder.tsx
+-
+ "use client";
+ 
+-import { useEffect, useRef, useState } from "react";
+-import { apiFetch } from "@/services/api";
+-
+-export type RecurrenceUnit = "day" | "month";
+-export type RecurrenceMode = "COUNT" | "UNTIL";
+-
+-export type RecurrenceValue = {
+-  interval: number;
+-  unit: RecurrenceUnit;
+-  until: string | null;
+-};
+-
+-export type RecurrenceOutput = {
+-  enabled: boolean;
+-  recurrence: RecurrenceValue | null;
+-};
++import { useState, useMemo } from "react";
+ 
+-type RecurrencePreview = {
+-  summary: string;
+-  next_dates: string[];
+-  total: number | null;
+-};
++import { RecurrenceControls } from "./recurrence/RecurrenceControls";
++import { useRecurrencePreview } from "./recurrence/useRecurrencePreview";
++import { RecurrencePreview } from "./recurrence/RecurrencePreview";
+ 
+ type Props = {
+-  animalId?: string; // ⬅️ agora opcional
++  animalId?: string;
+   baseDate: string;
+   baseTime?: string | null;
+-  value: RecurrenceOutput;
+-  onChange(value: RecurrenceOutput): void;
++  value: any;
++  onChange(value: any): void;
+ };
+ 
+-const MAX_COUNT = 365;
+-
+ export function RecurrenceBuilder({
+   animalId,
+   baseDate,
+@@ -43,281 +22,41 @@ export function RecurrenceBuilder({
+   onChange,
+ }: Props) {
+   const [interval, setInterval] = useState(1);
+-  const [unit, setUnit] = useState<RecurrenceUnit>("day");
+-
+-  const [mode, setMode] = useState<RecurrenceMode>("COUNT");
+-  const [count, setCount] = useState(5);
+-  const [until, setUntil] = useState("");
+-
+-  const [preview, setPreview] = useState<RecurrencePreview | null>(null);
+-  const [previewError, setPreviewError] = useState<string | null>(null);
+-  const [previewLoading, setPreviewLoading] = useState(false);
++  const [unit, setUnit] = useState("day");
+ 
+-  const abortRef = useRef<AbortController | null>(null);
+-  const debounceRef = useRef<number | null>(null);
+-
+-  function buildScheduledAtIso(): string | null {
++  const payload = useMemo(() => {
+     if (!baseDate) return null;
+ 
+-    const hhmm = baseTime?.trim() ? baseTime.trim() : "00:00";
++    const hhmm = baseTime?.trim() || "00:00";
+     const local = new Date(`${baseDate}T${hhmm}:00`);
+ 
+-    if (Number.isNaN(local.getTime())) return null;
+-
+-    return local.toISOString();
+-  }
+-
+-  function computeUntilFromCount(): string {
+-    const base = new Date(`${baseDate}T00:00:00`);
+-    const steps = (count - 1) * Math.max(1, interval);
+-
+-    if (unit === "day") base.setDate(base.getDate() + steps);
+-    else base.setMonth(base.getMonth() + steps);
+-
+-    const yyyy = base.getFullYear();
+-    const mm = String(base.getMonth() + 1).padStart(2, "0");
+-    const dd = String(base.getDate()).padStart(2, "0");
+-    return `${yyyy}-${mm}-${dd}`;
+-  }
+-
+-  function emitChange(untilValue: string | null) {
+-  onChange({
+-    enabled: true,
+-    recurrence: {
+-      interval,
+-      unit,
+-      until: untilValue,
+-    },
 -  });
--
 -}
 -
 -
-+  function removeExamType(index: number) {
-+    setSelectedExamTypes((prev) => {
-+      if (prev.length === 1) return prev;
-+      return prev.filter((_, i) => i !== index);
-+    });
-+  }
- 
-   async function submit() {
+-  // 🔁 Preview
+-useEffect(() => {
+-  if (!value.enabled || !baseDate || !animalId) {
+-    setPreview(null);
+-    return;
+-  }
 -
-     setError(null);
- 
--    const examTypesFiltered =
--      selectedExamTypes.filter(Boolean);
-+    const examTypesFiltered = selectedExamTypes.filter(Boolean);
- 
-     if (examTypesFiltered.length === 0) {
+-    if (debounceRef.current) {
+-      window.clearTimeout(debounceRef.current);
+-    }
+-    if (abortRef.current) {
+-      abortRef.current.abort();
+-    }
 -
-       setError("Adicione pelo menos um exame.");
-       return;
+-    setPreviewError(null);
 -
-     }
- 
-     if (!justification.trim()) {
+-    debounceRef.current = window.setTimeout(() => {
+-      const controller = new AbortController();
+-      abortRef.current = controller;
 -
-       setError("A justificativa clínica é obrigatória.");
-       return;
+-      async function loadPreview() {
+-        try {
+-          setPreviewLoading(true);
 -
-     }
- 
-     try {
+-          const scheduledAtIso = buildScheduledAtIso();
+-          if (!scheduledAtIso) {
+-            setPreviewError("Data/hora inválida.");
+-            return;
+-          }
 -
-       setLoading(true);
- 
--      await createClinicalExamOrder(
--        consultationPublicId,
--        {
--          exam_types: examTypesFiltered,
--          justification: justification.trim(),
--          diagnostic_hypothesis:
--            diagnosticHypothesis.trim() || null,
--          notes: notes.trim() || null,
--          priority,
--          laboratory: laboratory.trim() || null,
--          parameters,
--          problem_ids: problemIds,
+-          let untilPayload: string | null = null;
+-
+-          if (mode === "UNTIL") {
+-            if (until && new Date(until) < new Date(baseDate)) {
+-              setPreviewError(
+-                "A data final deve ser posterior à data inicial."
+-              );
+-              return;
+-            }
+-            untilPayload = until || null;
+-          } else {
+-            if (count < 1 || count > MAX_COUNT) {
+-              setPreviewError("Número de repetições inválido.");
+-              return;
+-            }
+-            untilPayload = computeUntilFromCount();
+-          }
+-
+-          const res = await apiFetch(
+-            `/api/v1/animals/${animalId}/tasks/preview`,
+-            {
+-              method: "POST",
+-              headers: { "Content-Type": "application/json" },
+-              body: JSON.stringify({
+-                scheduled_at: scheduledAtIso,
+-                recurrence: {
+-                  interval,
+-                  unit,
+-                  until: untilPayload,
+-                },
+-              }),
+-              signal: controller.signal,
+-            } as RequestInit
+-          );
+-
+-          if (mode === "COUNT") {
+-            setPreview({
+-              summary:
+-                count === 1
+-                  ? "Será criada uma única ocorrência."
+-                  : `Serão criadas ${count} ocorrências.`,
+-              next_dates: Array.isArray(res.next_dates)
+-                ? res.next_dates.slice(0, 3)
+-                : [],
+-              total: count,
+-            });
+-          } else {
+-            setPreview(res);
+-          }
+-
+-          setPreviewError(null);
+-
+-          onChange({
+-            enabled: true,
+-            recurrence: {
+-              interval,
+-              unit,
+-              until: untilPayload,
+-            },
+-          });
+-        } catch (e: any) {
+-          if (e?.name === "AbortError") return;
+-          setPreviewError("Não foi possível gerar o preview.");
+-        } finally {
+-          setPreviewLoading(false);
 -        }
--      );
-+      await createClinicalExamOrder(consultationPublicId, {
-+        exam_types: examTypesFiltered,
-+        justification: justification.trim(),
-+        diagnostic_hypothesis: diagnosticHypothesis.trim() || null,
-+        notes: notes.trim() || null,
-+        priority,
-+        laboratory: laboratory.trim() || null,
-+        parameters,
-+        problem_ids: selectedProblemIds,
-+      });
+-      }
+-
+-      loadPreview();
+-    }, 250);
+-
+-    return () => {
+-      if (debounceRef.current) {
+-        window.clearTimeout(debounceRef.current);
+-      }
+-      if (abortRef.current) {
+-        abortRef.current.abort();
+-      }
++    return {
++      scheduled_at: local.toISOString(),
++      recurrence: {
++        interval,
++        unit,
++        until: null,
++      },
+     };
+-  }, [
+-    value.enabled,
+-    baseDate,
+-    baseTime,
+-    interval,
+-    unit,
+-    mode,
+-    count,
+-    until,
+-    animalId,
+-  ]);
++  }, [baseDate, baseTime, interval, unit]);
++
++  const { preview, error, loading } =
++    useRecurrencePreview(animalId, payload);
  
-       setSelectedExamTypes([""]);
-+      setSelectedProblemIds(problemIds);
-       setJustification("");
-       setDiagnosticHypothesis("");
-       setNotes("");
-@@ -163,23 +157,14 @@ function removeExamType(index: number) {
-         confirmLabel: "OK",
-         hideCancel: true,
-       });
--
-     } catch (e: any) {
--
-       setError(e?.message || "Erro ao criar pedido.");
--
-     } finally {
--
-       setLoading(false);
--
-     }
--
-   }
- 
--
--
-   if (!open) {
--
-     return (
-       <button
-         type="button"
-@@ -189,17 +174,11 @@ function removeExamType(index: number) {
-         + Solicitar exame
-       </button>
-     );
--
-   }
- 
--
--
    return (
+     <div className="space-y-2">
+-      <label className="flex items-center gap-2 text-sm">
+-        <input
+-          type="checkbox"
+-          checked={value.enabled}
+-          onChange={(e) =>
+-            onChange({
+-              enabled: e.target.checked,
+-              recurrence: e.target.checked
+-                ? { interval, unit, until: null }
+-                : null,
+-            })
+-          }
+-        />
+-        Recorrente
+-      </label>
 -
-     <div className="rounded-lg border bg-white p-4 space-y-4">
+-      {value.enabled && (
+-        <div className="space-y-2">
+-          <div className="grid grid-cols-3 gap-2">
+-            <input
+-              type="number"
+-              min={1}
+-              value={interval}
+-              onChange={(e) =>
+-                setInterval(Number(e.target.value))
+-              }
+-              className="rounded-md border px-2 py-1 text-sm"
+-            />
 -
-       <div className="flex items-center justify-between">
+-            <select
+-              value={unit}
+-              onChange={(e) =>
+-                setUnit(e.target.value as RecurrenceUnit)
+-              }
+-              className="rounded-md border px-2 py-1 text-sm"
+-            >
+-              <option value="day">Dia(s)</option>
+-              <option value="month">Mês(es)</option>
+-            </select>
 -
-         <div>
-           <p className="text-sm font-semibold text-zinc-900">
-             Novo pedido de exame
-@@ -217,25 +196,12 @@ function removeExamType(index: number) {
-         >
-           Cancelar
-         </button>
+-            <select
+-              value={mode}
+-              onChange={(e) =>
+-                setMode(e.target.value as RecurrenceMode)
+-              }
+-              className="rounded-md border px-2 py-1 text-sm"
+-            >
+-              <option value="COUNT">Nº repetições</option>
+-              <option value="UNTIL">Data final</option>
+-            </select>
+-          </div>
 -
-       </div>
- 
--
--
--      {error && (
--        <p className="text-xs text-red-600">
--          {error}
--        </p>
+-          {mode === "COUNT" ? (
+-            <input
+-              type="number"
+-              min={1}
+-              max={MAX_COUNT}
+-              value={count}
+-              onChange={(e) =>
+-                setCount(Number(e.target.value))
+-              }
+-              className="rounded-md border px-2 py-1 text-sm w-32"
+-            />
+-          ) : (
+-            <input
+-              type="date"
+-              value={until}
+-              onChange={(e) => setUntil(e.target.value)}
+-              className="rounded-md border px-2 py-1 text-sm"
+-            />
+-          )}
+-        </div>
 -      )}
 -
+-      {value.enabled && baseDate && (
+-        <div className="text-xs bg-zinc-50 border rounded px-3 py-2 min-h-[72px]">
+-          {previewLoading && (
+-            <p className="text-zinc-500">Gerando preview…</p>
+-          )}
 -
+-          {!previewLoading && preview && (
+-            <>
+-              <p className="font-medium">{preview.summary}</p>
+-              <ul className="list-disc pl-4">
+-                {preview.next_dates.map((d) => (
+-                  <li key={d}>
+-                    {new Date(d).toLocaleDateString()}
+-                  </li>
+-                ))}
+-              </ul>
+-              {preview.total !== null && (
+-                <p className="text-zinc-500">
+-                  Total: {preview.total}
+-                </p>
+-              )}
+-            </>
+-          )}
 -
--      {/* EXAMES */}
-+      {error && <p className="text-xs text-red-600">{error}</p>}
- 
-       <div className="space-y-2">
--
-         <div className="flex items-center justify-between">
--
-           <label className="text-xs font-medium text-zinc-700">
-             Exames solicitados
-           </label>
-@@ -247,41 +213,22 @@ function removeExamType(index: number) {
-           >
-             + Adicionar exame
-           </button>
--
-         </div>
- 
--
--
-         {selectedExamTypes.map((value, index) => (
--
--          <div
--            key={index}
--            className="flex gap-2"
--          >
--
-+          <div key={index} className="flex gap-2">
-             <select
-               className="w-full rounded border px-3 py-2 text-sm"
-               value={value}
--              onChange={(e) =>
--                updateExamType(index, e.target.value)
--              }
-+              onChange={(e) => updateExamType(index, e.target.value)}
-             >
--
--              <option value="">
--                Selecione o exame
--              </option>
-+              <option value="">Selecione o exame</option>
- 
-               {examTypes.map((type) => (
--
--                <option
--                  key={type.public_id}
--                  value={type.public_id}
--                >
-+                <option key={type.public_id} value={type.public_id}>
-                   {type.name} — {type.category.name}
-                 </option>
--
-               ))}
--
-             </select>
- 
-             <button
-@@ -291,19 +238,29 @@ function removeExamType(index: number) {
-             >
-               remover
-             </button>
--
-           </div>
--
-         ))}
--
-       </div>
- 
-+      <div className="space-y-2">
-+        <label className="text-xs font-medium text-zinc-700">
-+          Problemas relacionados
-+        </label>
- 
--
--      {/* JUSTIFICATIVA */}
-+        {loadingProblems ? (
-+          <div className="text-xs text-zinc-500">
-+            Carregando problemas…
-+          </div>
-+        ) : (
-+          <ProblemSelector
-+            items={problemOptions}
-+            selected={selectedProblemIds}
-+            onChange={setSelectedProblemIds}
-+          />
-+        )}
-+      </div>
- 
-       <div className="space-y-1">
--
-         <label className="text-xs font-medium text-zinc-700">
-           Justificativa clínica
-         </label>
-@@ -311,20 +268,12 @@ function removeExamType(index: number) {
-         <textarea
-           className="w-full rounded border px-3 py-2 text-sm"
-           value={justification}
--          onChange={(e) =>
--            setJustification(e.target.value)
--          }
-+          onChange={(e) => setJustification(e.target.value)}
-           rows={3}
-         />
--
-       </div>
- 
--
--
--      {/* HIPÓTESE */}
--
-       <div className="space-y-1">
--
-         <label className="text-xs font-medium text-zinc-700">
-           Hipótese diagnóstica
-         </label>
-@@ -332,20 +281,12 @@ function removeExamType(index: number) {
-         <textarea
-           className="w-full rounded border px-3 py-2 text-sm"
-           value={diagnosticHypothesis}
--          onChange={(e) =>
--            setDiagnosticHypothesis(e.target.value)
--          }
-+          onChange={(e) => setDiagnosticHypothesis(e.target.value)}
-           rows={2}
-         />
--
-       </div>
- 
--
--
--      {/* OBSERVAÇÃO */}
--
-       <div className="space-y-1">
--
-         <label className="text-xs font-medium text-zinc-700">
-           Observação clínica
-         </label>
-@@ -353,22 +294,13 @@ function removeExamType(index: number) {
-         <textarea
-           className="w-full rounded border px-3 py-2 text-sm"
-           value={notes}
--          onChange={(e) =>
--            setNotes(e.target.value)
--          }
-+          onChange={(e) => setNotes(e.target.value)}
-           rows={2}
-         />
--
-       </div>
- 
--
--
--      {/* PRIORIDADE + LAB */}
--
-       <div className="grid grid-cols-2 gap-3">
--
-         <div className="space-y-1">
--
-           <label className="text-xs font-medium text-zinc-700">
-             Prioridade
-           </label>
-@@ -377,27 +309,15 @@ function removeExamType(index: number) {
-             className="w-full rounded border px-3 py-2 text-sm"
-             value={priority}
-             onChange={(e) =>
--              setPriority(
--                e.target.value as ClinicalExamOrderPriority
--              )
-+              setPriority(e.target.value as ClinicalExamOrderPriority)
-             }
-           >
--            <option value="ROUTINE">
--              Rotina
--            </option>
--
--            <option value="URGENT">
--              Urgente
--            </option>
--
-+            <option value="ROUTINE">Rotina</option>
-+            <option value="URGENT">Urgente</option>
-           </select>
--
-         </div>
- 
--
--
-         <div className="space-y-1">
--
-           <label className="text-xs font-medium text-zinc-700">
-             Laboratório
-           </label>
-@@ -405,21 +325,12 @@ function removeExamType(index: number) {
-           <input
-             className="w-full rounded border px-3 py-2 text-sm"
-             value={laboratory}
--            onChange={(e) =>
--              setLaboratory(e.target.value)
--            }
-+            onChange={(e) => setLaboratory(e.target.value)}
-           />
--
-         </div>
--
-       </div>
- 
--
--
--      {/* BOTÕES */}
--
-       <div className="flex justify-end gap-2 pt-2">
--
-         <button
-           type="button"
-           onClick={() => setOpen(false)}
-@@ -436,11 +347,7 @@ function removeExamType(index: number) {
-         >
-           Registrar pedido
-         </button>
--
-       </div>
--
+-          {!previewLoading && previewError && (
+-            <p className="text-red-600">{previewError}</p>
+-          )}
+-        </div>
+-      )}
++      <RecurrenceControls
++        interval={interval}
++        unit={unit}
++        setInterval={setInterval}
++        setUnit={setUnit}
++      />
++
++      <RecurrencePreview
++        loading={loading}
++        preview={preview}
++        error={error}
++      />
      </div>
--
    );
--
 -}
-\ No newline at end of file
 +}
+\ No newline at end of file
+diff --git a/src/components/agenda/TaskCard.tsx b/src/components/agenda/TaskCard.tsx
+index 0fc56c0..2687502 100644
+--- a/src/components/agenda/TaskCard.tsx
++++ b/src/components/agenda/TaskCard.tsx
+@@ -1,18 +1,14 @@
+-// /var/www/GSA/animal/frontend/src/components/agenda/TaskCard.tsx
+-
+ "use client";
+ 
+ // path: frontend/src/components/agenda/TaskCard.tsx
+ 
+ import type { AnimalTaskItem } from "@/types/agenda";
+-import {
+-  isDueSoon,
+-  statusBadgeClasses,
+-  statusLabel,
+-  TaskStatus,
+-} from "@/utils/task-actions";
++import { isDueSoon, TaskStatus } from "@/utils/task-actions";
+ import { useModal } from "@/components/ui/modal/ModalProvider";
+ 
++import { TaskBadges } from "./TaskBadges";
++import { AnimalTaskActions } from "./task/AnimalTaskActions";
++
+ type Props = {
+   animalId: string;
+   task: AnimalTaskItem;
+@@ -20,7 +16,6 @@ type Props = {
+     action: "done" | "reopen" | "cancel",
+     comment: string | null
+   ): Promise<void>;
+-  onRefresh?: () => void;
+ };
+ 
+ function actionLabel(action: string): string {
+@@ -36,36 +31,55 @@ function actionLabel(action: string): string {
+   }
+ }
+ 
+-export function TaskCard({
+-  animalId,
+-  task,
+-  onAction,
+-  onRefresh,
+-}: Props) {
++export function TaskCard({ animalId, task, onAction }: Props) {
+   const { confirm, prompt } = useModal();
+ 
+   const status = task.status as TaskStatus;
+   const dueSoon = isDueSoon(task, 12);
+-  const rc = task.recurrence_context ?? null;
+-  const last = task.last_action ?? null;
+ 
+   const isTreatment = task.source === "TREATMENT";
+-
+-  const canMarkDone = status === "PLANNED";
+-  const canReopen = status === "DONE";
+-  const canCancel = status === "PLANNED";
++  const rc = task.recurrence_context ?? null;
++  const last = task.last_action ?? null;
+ 
+   async function askComment(label: string): Promise<string | null> {
+     const value = await prompt({
+       title: "Comentário",
+       label,
+     });
++
+     return value;
+   }
+ 
++  async function done() {
++    const c = await askComment("Comentário (opcional):");
++    if (c === null) return;
++
++    await onAction("done", c);
++  }
++
++  async function cancel() {
++    const ok = await confirm({
++      title: "Cancelar tarefa?",
++      message: "Cancelar esta tarefa?",
++    });
++
++    if (!ok) return;
++
++    const c = await askComment("Motivo (opcional):");
++    if (c === null) return;
++
++    await onAction("cancel", c);
++  }
++
++  async function reopen() {
++    const c = await askComment("Motivo da reabertura:");
++    if (c === null) return;
++
++    await onAction("reopen", c);
++  }
++
+   return (
+     <li className="rounded-md border bg-white px-4 py-3 space-y-2">
+-      {/* HEADER */}
+       <div className="flex items-start justify-between gap-3">
+         <div className="min-w-0 space-y-1">
+           <div className="flex items-center gap-2">
+@@ -73,28 +87,13 @@ export function TaskCard({
+               {task.title}
+             </p>
+ 
+-            <span
+-              className={[
+-                "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+-                statusBadgeClasses(status),
+-              ].join(" ")}
+-            >
+-              {statusLabel(status)}
+-            </span>
+-
+-            {dueSoon && status === "PLANNED" && (
+-              <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">
+-                Atrasada
+-              </span>
+-            )}
++            <TaskBadges
++              status={status}
++              isTreatment={isTreatment}
++              dueSoon={dueSoon}
++            />
+           </div>
+ 
+-          {isTreatment && (
+-            <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs font-medium">
+-              Tratamento clínico
+-            </span>
+-          )}
+-
+           {task.description && (
+             <p className="text-sm text-zinc-800 whitespace-pre-line">
+               {task.description}
+@@ -113,65 +112,6 @@ export function TaskCard({
+               : "Sem data"}
+           </p>
+ 
+-          <p className="text-xs text-zinc-600">
+-            Criada por{" "}
+-            <span className="font-medium">
+-              {task.created_by.name}
+-            </span>
+-          </p>
+-
+-          <div className="flex items-center gap-2">
+-  <p className="font-medium text-zinc-900 truncate">
+-    {task.title}
+-  </p>
+-
+-  <span
+-    className={[
+-      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+-      statusBadgeClasses(status),
+-    ].join(" ")}
+-  >
+-    {statusLabel(status)}
+-  </span>
+-
+-  {isTreatment && (
+-    <span className="inline-flex items-center rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-semibold">
+-      Tratamento
+-    </span>
+-  )}
+-
+-  {dueSoon && status === "PLANNED" && (
+-    <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">
+-      Atrasada
+-    </span>
+-  )}
+-</div>
+-
+-
+-
+-{/*           {isTreatment && (
+-            <div className="text-xs text-zinc-500 space-y-0.5">
+-              {task.treatment_public_id && (
+-                <div>
+-                  Tratamento ID:{" "}
+-                  <span className="font-mono">
+-                    {task.treatment_public_id}
+-                  </span>
+-                </div>
+-              )}
+-
+-              {task.treatment_schedule_public_id && (
+-                <div>
+-                  Medicação ID:{" "}
+-                  <span className="font-mono">
+-                    {task.treatment_schedule_public_id}
+-                  </span>
+-                </div>
+-              )}
+-            </div>
+-          )} */}
+-
+-          {/* 🔍 ÚLTIMA AÇÃO (AUDITORIA) */}
+           {last && last.by && (
+             <p className="text-xs text-zinc-500">
+               Última ação:{" "}
+@@ -194,54 +134,12 @@ export function TaskCard({
+           )}
+         </div>
+ 
+-        {/* ACTIONS */}
+-        <div className="flex items-center gap-2 shrink-0">
+-          {canMarkDone && (
+-            <button
+-              onClick={async () => {
+-                const c = await askComment("Comentário (opcional):");
+-                if (c === null) return;
+-                await onAction("done", c);
+-              }}
+-              className="text-xs px-3 py-1.5 rounded-md border border-green-300 text-green-700 hover:bg-green-50"
+-            >
+-              Marcar como feita
+-            </button>
+-          )}
+-
+-          {canReopen && (
+-            <button
+-              onClick={async () => {
+-                const c = await askComment("Motivo da reabertura:");
+-                if (c === null) return;
+-                await onAction("reopen", c);
+-              }}
+-              className="text-xs px-3 py-1.5 rounded-md border border-amber-300 text-amber-700 hover:bg-amber-50"
+-            >
+-              Reabrir
+-            </button>
+-          )}
+-
+-          {canCancel && (
+-            <button
+-              onClick={async () => {
+-                const ok = await confirm({
+-                  title: "Cancelar tarefa?",
+-                  message: "Cancelar esta tarefa?",
+-                });
+-                if (!ok) return;
+-
+-                const c = await askComment("Motivo (opcional):");
+-                if (c === null) return;
+-
+-                await onAction("cancel", c);
+-              }}
+-              className="text-xs px-3 py-1.5 rounded-md border border-red-300 text-red-700 hover:bg-red-50"
+-            >
+-              Cancelar
+-            </button>
+-          )}
+-        </div>
++        <AnimalTaskActions
++          status={status}
++          done={done}
++          cancel={cancel}
++          reopen={reopen}
++        />
+       </div>
+     </li>
+   );
+diff --git a/src/components/agenda/TaskCreateForm.tsx b/src/components/agenda/TaskCreateForm.tsx
+index 64cad3b..dd197bd 100644
+--- a/src/components/agenda/TaskCreateForm.tsx
++++ b/src/components/agenda/TaskCreateForm.tsx
+@@ -1,13 +1,15 @@
+-// path: frontend/src/components/agenda/TaskCreateForm.tsx
++// /var/www/GSA/animal/frontend/src/components/agenda/TaskCreateForm.tsx
+ 
+ "use client";
+ 
+ import { useState } from "react";
+ import { createAnimalTask } from "@/services/animalTasks";
+-import {
+-  RecurrenceBuilder,
+-  RecurrenceOutput,
+-} from "@/components/agenda/RecurrenceBuilder";
++import { RecurrenceBuilder } from "@/components/agenda/RecurrenceBuilder";
++
++type RecurrenceOutput = {
++  enabled: boolean;
++  recurrence: unknown | null;
++};
+ 
+ type Props = {
+   animalId: string;
+@@ -103,7 +105,7 @@ export function TaskCreateForm({ animalId, onCreated }: Props) {
+   }
+ 
+   return (
+-    <div className="rounded-md border bg-white p-4 space-y-3">
++    <div className="space-y-3 rounded-md border bg-white p-4">
+       <div className="flex items-center justify-between">
+         <h3 className="text-sm font-medium text-zinc-900">
+           Nova tarefa
 diff --git a/src/components/animals/clinic/ConsultationCard.tsx b/src/components/animals/clinic/ConsultationCard.tsx
-index 81b604e..27dac1d 100644
+index cc108ea..8a82dd0 100644
 --- a/src/components/animals/clinic/ConsultationCard.tsx
 +++ b/src/components/animals/clinic/ConsultationCard.tsx
-@@ -4,9 +4,11 @@ import { useState } from "react";
- import { ConsultationHeader } from "./ConsultationHeader";
- import { ConsultationFormFields } from "./ConsultationFormFields";
- import { AnimalExamOrderCreateForm } from "./AnimalExamOrderCreateForm";
-+import { ProblemCreateForm } from "@/components/animals/clinic/problems/ProblemCreateForm";
- import { useConsultationExamOrders } from "@/components/animals/clinic/hooks/useConsultationExamOrders";
- import { ExamOrderCard } from "./ExamOrderCard";
+@@ -10,6 +10,7 @@ import { ExamOrderCard } from "./ExamOrderCard";
  import { ConsultationNotesSection } from "./ConsultationNotesSection";
-+import { useRouter } from "next/navigation";
+ import { useRouter } from "next/navigation";
+ import { ProblemLinkForm } from "@/components/animals/clinic/problems/ProblemLinkForm";
++import { ConsultationExamOrdersSection } from "@/components/animals/clinic/ConsultationExamOrdersSection";
  
  type Props = {
    consultation: any;
-@@ -14,7 +16,9 @@ type Props = {
- };
- 
- export function ConsultationCard({ consultation, animalPublicId }: Props) {
-+  const router = useRouter();
-   const [open, setOpen] = useState(false);
-+  const [showProblemForm, setShowProblemForm] = useState(false);
- 
-   const {
-     items: examOrders,
-@@ -66,6 +70,35 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
-             onCreated={() => {}}
+@@ -66,6 +67,11 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
+             weight={consultation.weight?.toString() ?? ""}
            />
  
-+          <section className="space-y-3">
-+            <div className="flex items-center justify-between gap-3">
-+              <h3 className="text-xs font-semibold text-zinc-700">
-+                Problemas clínicos
-+              </h3>
 +
-+              <button
-+                type="button"
-+                onClick={() => setShowProblemForm((v) => !v)}
-+                className="text-xs text-zinc-700 hover:underline"
-+              >
-+                + Abrir problema
-+              </button>
-+            </div>
++            <ConsultationExamOrdersSection
++    consultationPublicId={consultation.public_id}
++  />
++  
+           <ConsultationNotesSection
+             consultationPublicId={consultation.public_id}
+             notes={consultation.notes ?? []}
+diff --git a/src/hooks/useAnimalConsultations.ts b/src/hooks/useAnimalConsultations.ts
+index cbc4e8d..a4098ea 100644
+--- a/src/hooks/useAnimalConsultations.ts
++++ b/src/hooks/useAnimalConsultations.ts
+@@ -1,18 +1,24 @@
++// /var/www/GSA/animal/frontend/src/hooks/useAnimalConsultations.ts
 +
-+            {showProblemForm ? (
-+              <ProblemCreateForm
-+                consultationPublicId={consultation.public_id}
-+                onCancel={() => setShowProblemForm(false)}
-+                onCreated={async (problemPublicId) => {
-+                  setShowProblemForm(false);
-+                  router.push(
-+                    `/dashboard/animals/${animalPublicId}/clinic/problems/${problemPublicId}`
-+                  );
-+                }}
-+              />
-+            ) : null}
-+          </section>
-+
-           <section className="space-y-3">
-             <div className="flex items-center justify-between gap-3">
-               <h3 className="text-xs font-semibold text-zinc-700">
-@@ -74,6 +107,7 @@ export function ConsultationCard({ consultation, animalPublicId }: Props) {
+ "use client";
  
-               <AnimalExamOrderCreateForm
-                 consultationPublicId={consultation.public_id}
-+                animalPublicId={animalPublicId}
-                 onCreated={reloadExamOrders}
-               />
-             </div>
-diff --git a/src/services/animalConsultations.ts b/src/services/animalConsultations.ts
-index c585f71..bbc7ec6 100644
---- a/src/services/animalConsultations.ts
-+++ b/src/services/animalConsultations.ts
-@@ -84,13 +84,14 @@ export async function fetchAnimalConsultations(
- export async function fetchConsultationDetails(
-   consultationPublicId: string
- ): Promise<ConsultationDetailsDTO> {
+ import { useEffect, useState } from "react";
+ import {
+   fetchAnimalConsultations,
+-  ConsultationDTO,
++  ConsultationSummaryDTO,
+ } from "@/services/animalConsultations";
+ 
+ export function useAnimalConsultations(animalId?: string) {
+-  const [consultations, setConsultations] = useState<ConsultationDTO[]>([]);
++  const [consultations, setConsultations] = useState<ConsultationSummaryDTO[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
+ 
+   async function reload() {
+-    if (!animalId) return;
++    if (!animalId) {
++      setConsultations([]);
++      setError(null);
++      return;
++    }
+ 
+     try {
+       const data = await fetchAnimalConsultations(animalId);
+@@ -45,4 +51,4 @@ export function useAnimalConsultations(animalId?: string) {
+     error,
+     reload,
+   };
+-}
++}
+\ No newline at end of file
+diff --git a/src/hooks/useAnimalTasks.ts b/src/hooks/useAnimalTasks.ts
+index bcfbe6a..718e888 100644
+--- a/src/hooks/useAnimalTasks.ts
++++ b/src/hooks/useAnimalTasks.ts
+@@ -1,9 +1,10 @@
+-// path: frontend/src/hooks/useAnimalTasks.ts
+-
+ "use client";
+ 
++// path: frontend/src/hooks/useAnimalTasks.ts
 +
-   const res: any = await http(
-     `/api/v1/consultations/${consultationPublicId}`
-   );
+ import { useCallback, useEffect, useMemo, useState } from "react";
+ import { getAnimalTasks } from "@/services/animalTasks";
++import { resolveTaskDateRange } from "@/utils/tasks/task-date-range";
+ import type { AnimalTaskItem } from "@/types/agenda";
  
--  const c = res?.consultations?.[0];
-+  const c = res.consultation;
+ export type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
+@@ -20,65 +21,32 @@ export type TaskFiltersState = {
  
--  if (!c) {
-+  if (!c || !c.public_id) {
-     throw new Error("Consulta não encontrada.");
+   status: TaskStatusFilter;
+ 
+-
+   treatmentPublicId?: string;
+   treatmentSchedulePublicId?: string;
+ };
+ 
+-function resolveDateRange(
+-  todayOnly: boolean,
+-  year: number,
+-  month: number,
+-  from?: string,
+-  to?: string
+-) {
+-  if (from && to) {
+-    return {
+-      from: new Date(from + "T00:00:00").toISOString(),
+-      to: new Date(to + "T23:59:59").toISOString(),
+-    };
+-  }
+-
+-  if (todayOnly) {
+-    const now = new Date();
+-    const yyyy = now.getFullYear();
+-    const mm = String(now.getMonth() + 1).padStart(2, "0");
+-    const dd = String(now.getDate()).padStart(2, "0");
+-
+-    return {
+-      from: `${yyyy}-${mm}-${dd}T00:00:00`,
+-      to: `${yyyy}-${mm}-${dd}T23:59:59`,
+-    };
+-  }
+-
+-  return {
+-    from: new Date(year, month - 1, 1, 0, 0, 0).toISOString(),
+-    to: new Date(year, month, 0, 23, 59, 59).toISOString(),
+-  };
+-}
+-
+ export function useAnimalTasks(animalId: string | undefined) {
+   const now = useMemo(() => new Date(), []);
+ 
+   const [tasks, setTasks] = useState<AnimalTaskItem[]>([]);
+   const [loading, setLoading] = useState(true);
+ 
+-const [filters, setFilters] = useState<TaskFiltersState>({
+-  todayOnly: false,
+-  expanded: false,
+-  year: now.getFullYear(),
+-  month: now.getMonth() + 1,
+-  from: undefined,
+-  to: undefined,
+-  status: "PLANNED",
+-  treatmentPublicId: undefined,
+-  treatmentSchedulePublicId: undefined,
+-});
++  const [filters, setFilters] = useState<TaskFiltersState>({
++    todayOnly: false,
++    expanded: false,
++    year: now.getFullYear(),
++    month: now.getMonth() + 1,
++    from: undefined,
++    to: undefined,
++    status: "PLANNED",
++    treatmentPublicId: undefined,
++    treatmentSchedulePublicId: undefined,
++  });
+ 
+   const reload = useCallback(async () => {
+     if (!animalId) return;
+ 
+-    const range = resolveDateRange(
++    const range = resolveTaskDateRange(
+       filters.todayOnly,
+       filters.year,
+       filters.month,
+@@ -89,12 +57,12 @@ const [filters, setFilters] = useState<TaskFiltersState>({
+     const backendStatus =
+       filters.status === "LATE" ? "PLANNED" : filters.status;
+ 
+-const res = await getAnimalTasks(animalId, {
+-  ...range,
+-  status: backendStatus === "ALL" ? undefined : backendStatus,
+-  treatment_public_id: filters.treatmentPublicId,
+-  treatment_schedule_public_id: filters.treatmentSchedulePublicId,
+-});
++    const res = await getAnimalTasks(animalId, {
++      ...range,
++      status: backendStatus === "ALL" ? undefined : backendStatus,
++      treatment_public_id: filters.treatmentPublicId,
++      treatment_schedule_public_id: filters.treatmentSchedulePublicId,
++    });
+ 
+     const items =
+       filters.status === "LATE"
+@@ -102,11 +70,11 @@ const res = await getAnimalTasks(animalId, {
+             (t) =>
+               t.status === "PLANNED" &&
+               t.scheduled_at &&
+-              new Date(t.scheduled_at) < new Date()
++              new Date(t.scheduled_at) < now
+           )
+         : res.items;
+ 
+-    setTasks(items);
++    setTasks(() => items);
+   }, [
+     animalId,
+     filters.todayOnly,
+@@ -117,6 +85,7 @@ const res = await getAnimalTasks(animalId, {
+     filters.status,
+     filters.treatmentPublicId,
+     filters.treatmentSchedulePublicId,
++    now,
+   ]);
+ 
+   useEffect(() => {
+@@ -124,11 +93,51 @@ const res = await getAnimalTasks(animalId, {
+     reload().finally(() => setLoading(false));
+   }, [reload]);
+ 
++  /**
++   * Atualiza uma tarefa localmente sem reload
++   */
++  const updateTaskLocally = useCallback(
++    (taskId: number, patch: Partial<AnimalTaskItem>) => {
++      setTasks((prev) =>
++        prev.map((task) =>
++          task.id === taskId
++            ? { ...task, ...patch }
++            : task
++        )
++      );
++    },
++    []
++  );
++
++  /**
++   * Remove tarefa da lista
++   */
++  const removeTaskLocally = useCallback((taskId: number) => {
++    setTasks((prev) =>
++      prev.filter((task) => task.id !== taskId)
++    );
++  }, []);
++
++  /**
++   * Adiciona tarefa nova na lista
++   */
++  const addTaskLocally = useCallback(
++    (task: AnimalTaskItem) => {
++      setTasks((prev) => [task, ...prev]);
++    },
++    []
++  );
++
+   return {
+     tasks,
+     loading,
+     filters,
+     setFilters,
++
+     reload,
++
++    updateTaskLocally,
++    removeTaskLocally,
++    addTaskLocally,
+   };
+-}
++}
+\ No newline at end of file
+diff --git a/src/hooks/useTaskActions.ts b/src/hooks/useTaskActions.ts
+index a6dc025..e534dd6 100644
+--- a/src/hooks/useTaskActions.ts
++++ b/src/hooks/useTaskActions.ts
+@@ -26,12 +26,20 @@ export function useTaskActions(
+     return value;
    }
  
-@@ -111,8 +112,7 @@ export async function fetchConsultationDetails(
-       created_by: c.created_by ?? null,
-     },
++async function execute(
++  action: () => Promise<unknown>
++){
++    await action();
++    await onReload();
++  }
++
+   async function done() {
+-    const c = await askComment();
+-    if (c === null) return;
++    const comment = await askComment();
++    if (comment === null) return;
  
--    notes: c.notes ?? [],
+-    await markTaskDone(animalId, taskId, c);
+-    await onReload();
++    await execute(() =>
++      markTaskDone(animalId, taskId, comment)
++    );
+   }
+ 
+   async function cancel() {
+@@ -42,19 +50,23 @@ export function useTaskActions(
+ 
+     if (!ok) return;
+ 
+-    const c = await askComment("Motivo (opcional):");
+-    if (c === null) return;
++    const comment = await askComment("Motivo (opcional):");
++    if (comment === null) return;
+ 
+-    await cancelTask(animalId, taskId, c);
+-    await onReload();
++    await execute(() =>
++      cancelTask(animalId, taskId, comment)
++    );
+   }
+ 
+   async function reopen() {
+-    const c = await askComment("Motivo da reabertura (opcional):");
+-    if (c === null) return;
++    const comment = await askComment(
++      "Motivo da reabertura (opcional):"
++    );
++    if (comment === null) return;
+ 
+-    await reopenTask(animalId, taskId, c);
+-    await onReload();
++    await execute(() =>
++      reopenTask(animalId, taskId, comment)
++    );
+   }
+ 
+   async function cancelRecurrence() {
+@@ -67,14 +79,14 @@ export function useTaskActions(
+ 
+     if (!ok) return;
+ 
+-    await cancelTaskRecurrence(
+-      animalId,
+-      taskId,
+-      "Recorrência cancelada pelo utilizador",
+-      true
++    await execute(() =>
++      cancelTaskRecurrence(
++        animalId,
++        taskId,
++        "Recorrência cancelada pelo utilizador",
++        true
++      )
+     );
 -
-+    notes: res.notes ?? [],
-     exam_orders: res.exam_orders ?? [],
-   };
- }
+-    await onReload();
+   }
+ 
+   return {
+diff --git a/src/services/animals.ts b/src/services/animals.ts
+index 8d8ef69..2a7447b 100644
+--- a/src/services/animals.ts
++++ b/src/services/animals.ts
+@@ -25,12 +25,9 @@ export type ParentPayload = ParentByPublicId | ParentExternal;
+ 
+ export type AnimalListItem = {
+   public_id: string;
+-  call_name: string | null;
+-  official_name?: string | null;
+-  type: string | null;
+-  photo?: {
+-    url?: string;
+-  };
++  call_name?: string | null;
++  type?: string | null;
++  my_role?: string | null;
+ };
+ 
+ /* =========================
+diff --git a/src/services/api.ts b/src/services/api.ts
+index 8ebbd9c..7f44acf 100644
+--- a/src/services/api.ts
++++ b/src/services/api.ts
+@@ -1,7 +1,6 @@
+-// path: src/services/api.ts
++// /var/www/GSA/animal/frontend/src/services/api.ts
+ 
+-import { ENV } from "@/lib/env";
+-import { getAccessToken } from "@/stores/auth";
++import { http } from "@/services/http";
+ 
+ type ApiOptions = RequestInit & {
+   auth?: boolean;
+@@ -11,47 +10,25 @@ export async function apiFetch(
+   path: string,
+   options: ApiOptions = {}
+ ) {
+-  const token = getAccessToken();
+-
+-  const headers = new Headers(options.headers || {});
+-  headers.set("Accept", "application/json");
+-
+-  if (options.auth !== false && token) {
+-    headers.set("Authorization", `Bearer ${token}`);
+-  }
+-
+-  const res = await fetch(`${ENV.API_BASE_URL}${path}`, {
+-    ...options,
+-    headers,
+-    credentials: "include",
+-  });
+-
+-  if (!res.ok) {
+-    // tenta extrair erro JSON, se existir
+-    let message = `HTTP ${res.status}`;
+-
+-    try {
+-      const text = await res.text();
+-      if (text) {
+-        message = text;
+-      }
+-    } catch {
+-      // ignora
++  const method = (options.method ?? "GET") as
++    | "GET"
++    | "POST"
++    | "PUT"
++    | "PATCH"
++    | "DELETE";
++
++  try {
++    return await http(path, {
++      method,
++      body: options.body,
++      headers: options.headers as Record<string, string> | undefined,
++      credentials: options.credentials,
++    });
++  } catch (err: any) {
++    if (err?.body) {
++      throw new Error(JSON.stringify(err.body));
+     }
+ 
+-    throw new Error(message);
++    throw err;
+   }
+-
+-  // ✅ 204 = sem corpo
+-  if (res.status === 204) {
+-    return null;
+-  }
+-
+-  // proteção extra: corpo vazio
+-  const text = await res.text();
+-  if (!text) {
+-    return null;
+-  }
+-
+-  return JSON.parse(text);
+-}
++}
+\ No newline at end of file
+diff --git a/src/utils/task-actions.ts b/src/utils/task-actions.ts
+index 074808e..c1fe624 100644
+--- a/src/utils/task-actions.ts
++++ b/src/utils/task-actions.ts
+@@ -1,6 +1,6 @@
+ // path: frontend/src/utils/task-actions.ts
+ 
+-import type { AnimalTaskItem } from "@/services/animalTasks";
++import type { AnimalTaskItem } from "@/types/agenda";
+ 
+ export type TaskStatus = "PLANNED" | "DONE" | "CANCELED";
+ 
+@@ -44,4 +44,4 @@ export function isDueSoon(
+   if (diffMs < 0) return false;
+ 
+   return diffMs <= hours * 60 * 60 * 1000;
+-}
++}
+\ No newline at end of file

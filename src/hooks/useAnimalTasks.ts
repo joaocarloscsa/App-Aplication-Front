@@ -1,9 +1,10 @@
-// path: frontend/src/hooks/useAnimalTasks.ts
-
 "use client";
+
+// path: frontend/src/hooks/useAnimalTasks.ts
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAnimalTasks } from "@/services/animalTasks";
+import { resolveTaskDateRange } from "@/utils/tasks/task-date-range";
 import type { AnimalTaskItem } from "@/types/agenda";
 
 export type TaskStatusFilter = "PLANNED" | "DONE" | "LATE" | "ALL";
@@ -20,42 +21,9 @@ export type TaskFiltersState = {
 
   status: TaskStatusFilter;
 
-
   treatmentPublicId?: string;
   treatmentSchedulePublicId?: string;
 };
-
-function resolveDateRange(
-  todayOnly: boolean,
-  year: number,
-  month: number,
-  from?: string,
-  to?: string
-) {
-  if (from && to) {
-    return {
-      from: new Date(from + "T00:00:00").toISOString(),
-      to: new Date(to + "T23:59:59").toISOString(),
-    };
-  }
-
-  if (todayOnly) {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-
-    return {
-      from: `${yyyy}-${mm}-${dd}T00:00:00`,
-      to: `${yyyy}-${mm}-${dd}T23:59:59`,
-    };
-  }
-
-  return {
-    from: new Date(year, month - 1, 1, 0, 0, 0).toISOString(),
-    to: new Date(year, month, 0, 23, 59, 59).toISOString(),
-  };
-}
 
 export function useAnimalTasks(animalId: string | undefined) {
   const now = useMemo(() => new Date(), []);
@@ -63,22 +31,22 @@ export function useAnimalTasks(animalId: string | undefined) {
   const [tasks, setTasks] = useState<AnimalTaskItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-const [filters, setFilters] = useState<TaskFiltersState>({
-  todayOnly: false,
-  expanded: false,
-  year: now.getFullYear(),
-  month: now.getMonth() + 1,
-  from: undefined,
-  to: undefined,
-  status: "PLANNED",
-  treatmentPublicId: undefined,
-  treatmentSchedulePublicId: undefined,
-});
+  const [filters, setFilters] = useState<TaskFiltersState>({
+    todayOnly: false,
+    expanded: false,
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+    from: undefined,
+    to: undefined,
+    status: "PLANNED",
+    treatmentPublicId: undefined,
+    treatmentSchedulePublicId: undefined,
+  });
 
   const reload = useCallback(async () => {
     if (!animalId) return;
 
-    const range = resolveDateRange(
+    const range = resolveTaskDateRange(
       filters.todayOnly,
       filters.year,
       filters.month,
@@ -89,12 +57,12 @@ const [filters, setFilters] = useState<TaskFiltersState>({
     const backendStatus =
       filters.status === "LATE" ? "PLANNED" : filters.status;
 
-const res = await getAnimalTasks(animalId, {
-  ...range,
-  status: backendStatus === "ALL" ? undefined : backendStatus,
-  treatment_public_id: filters.treatmentPublicId,
-  treatment_schedule_public_id: filters.treatmentSchedulePublicId,
-});
+    const res = await getAnimalTasks(animalId, {
+      ...range,
+      status: backendStatus === "ALL" ? undefined : backendStatus,
+      treatment_public_id: filters.treatmentPublicId,
+      treatment_schedule_public_id: filters.treatmentSchedulePublicId,
+    });
 
     const items =
       filters.status === "LATE"
@@ -102,11 +70,11 @@ const res = await getAnimalTasks(animalId, {
             (t) =>
               t.status === "PLANNED" &&
               t.scheduled_at &&
-              new Date(t.scheduled_at) < new Date()
+              new Date(t.scheduled_at) < now
           )
         : res.items;
 
-    setTasks(items);
+    setTasks(() => items);
   }, [
     animalId,
     filters.todayOnly,
@@ -117,6 +85,7 @@ const res = await getAnimalTasks(animalId, {
     filters.status,
     filters.treatmentPublicId,
     filters.treatmentSchedulePublicId,
+    now,
   ]);
 
   useEffect(() => {
@@ -124,11 +93,51 @@ const res = await getAnimalTasks(animalId, {
     reload().finally(() => setLoading(false));
   }, [reload]);
 
+  /**
+   * Atualiza uma tarefa localmente sem reload
+   */
+  const updateTaskLocally = useCallback(
+    (taskId: number, patch: Partial<AnimalTaskItem>) => {
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId
+            ? { ...task, ...patch }
+            : task
+        )
+      );
+    },
+    []
+  );
+
+  /**
+   * Remove tarefa da lista
+   */
+  const removeTaskLocally = useCallback((taskId: number) => {
+    setTasks((prev) =>
+      prev.filter((task) => task.id !== taskId)
+    );
+  }, []);
+
+  /**
+   * Adiciona tarefa nova na lista
+   */
+  const addTaskLocally = useCallback(
+    (task: AnimalTaskItem) => {
+      setTasks((prev) => [task, ...prev]);
+    },
+    []
+  );
+
   return {
     tasks,
     loading,
     filters,
     setFilters,
+
     reload,
+
+    updateTaskLocally,
+    removeTaskLocally,
+    addTaskLocally,
   };
 }

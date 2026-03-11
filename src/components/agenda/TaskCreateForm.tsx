@@ -1,13 +1,12 @@
-// path: frontend/src/components/agenda/TaskCreateForm.tsx
+// /var/www/GSA/animal/frontend/src/components/agenda/TaskCreateForm.tsx
 
 "use client";
 
 import { useState } from "react";
 import { createAnimalTask } from "@/services/animalTasks";
-import {
-  RecurrenceBuilder,
-  RecurrenceOutput,
-} from "@/components/agenda/RecurrenceBuilder";
+import { RecurrenceBuilder } from "@/components/agenda/RecurrenceBuilder";
+
+import { RecurrenceOutput } from "@/components/agenda/RecurrenceBuilder";
 
 type Props = {
   animalId: string;
@@ -103,7 +102,7 @@ export function TaskCreateForm({ animalId, onCreated }: Props) {
   }
 
   return (
-    <div className="rounded-md border bg-white p-4 space-y-3">
+    <div className="space-y-3 rounded-md border bg-white p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-zinc-900">
           Nova tarefa

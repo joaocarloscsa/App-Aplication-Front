@@ -1,3 +1,5 @@
+// /var/www/GSA/animal/frontend/src/app/(protected)/dashboard/animals/[animalId]/page.tsx
+
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -11,18 +13,55 @@ import { AnimalSectionMenu } from "@/components/animals/AnimalSectionMenu";
 import { AnimalBasicForm } from "@/components/animals/AnimalBasicForm";
 import { AnimalParentsForm } from "@/components/animals/AnimalParentsForm";
 
+type AnimalPageDTO = {
+  public_id: string;
+  call_name?: string | null;
+  photo?: unknown;
+  my_role?: string | null;
+  permissions?: {
+    edit?: boolean;
+    invite?: boolean;
+    clinic?: boolean;
+    agenda?: boolean;
+    files?: boolean;
+    tutors?: boolean;
+    organizations?: boolean;
+    history?: boolean;
+  } | null;
+  tutors?: {
+    primary?: {
+      person_public_id: string;
+      name: string;
+    } | null;
+    invited?: Array<{
+      person_public_id: string;
+      name: string;
+    }>;
+  } | null;
+  [key: string]: unknown;
+};
+
 export default function AnimalPage() {
   const { animalId } = useParams<{ animalId: string }>();
 
-  const [animal, setAnimal] = useState<any>(null);
+  const [animal, setAnimal] = useState<AnimalPageDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
   const reloadAnimal = useCallback(async () => {
-    if (!animalId) return;
+    if (!animalId) {
+      setAnimal(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-    const data = await getAnimal(animalId);
-    setAnimal(data);
-    setLoading(false);
+
+    try {
+      const data = await getAnimal<AnimalPageDTO>(animalId);
+      setAnimal(data);
+    } finally {
+      setLoading(false);
+    }
   }, [animalId]);
 
   useEffect(() => {
@@ -45,11 +84,13 @@ export default function AnimalPage() {
 
       <AnimalSectionMenu animalId={animal.public_id} />
 
-      {/* VISÃO GERAL = FORMULÁRIOS */}
-      <AnimalBasicForm
-        publicId={animal.public_id}
-        initialData={animal}
-      />
+<AnimalBasicForm
+  publicId={animal.public_id}
+  initialData={{
+    ...animal,
+    call_name: animal.call_name ?? undefined,
+  }}
+/>
 
       <AnimalParentsForm
         publicId={animal.public_id}
