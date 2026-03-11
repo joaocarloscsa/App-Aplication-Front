@@ -1,17 +1,19 @@
+// frontend/src/services/clinicalExamOrders.ts
+
 import { apiFetch } from "./api";
+
 import type {
   ClinicalExamOrderListResponse,
   ClinicalExamOrderPriority,
-} from "@/types/clinicalExamOrders";
-
-import type {
-  ClinicalExamTypeListResponse
+  ClinicalExamTypeListResponse,
 } from "@/types/clinicalExamOrders";
 
 export async function listConsultationExamOrders(
   consultationPublicId: string
 ): Promise<ClinicalExamOrderListResponse> {
-  return apiFetch(`/api/v1/consultations/${consultationPublicId}/exam-orders`);
+  return apiFetch(
+    `/api/v1/consultations/${consultationPublicId}/exam-orders`
+  ) as Promise<ClinicalExamOrderListResponse>;
 }
 
 export async function createClinicalExamOrder(
@@ -27,17 +29,22 @@ export async function createClinicalExamOrder(
     problem_ids?: string[];
   }
 ): Promise<{ public_id: string; status: string }> {
-  return apiFetch(`/api/v1/consultations/${consultationPublicId}/exam-orders`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  return apiFetch(
+    `/api/v1/consultations/${consultationPublicId}/exam-orders`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  ) as Promise<{ public_id: string; status: string }>;
 }
 
 export async function listAnimalExamOrders(
   animalPublicId: string
 ): Promise<ClinicalExamOrderListResponse> {
-  return apiFetch(`/api/v1/animals/${animalPublicId}/exam-orders`);
+  return apiFetch(
+    `/api/v1/animals/${animalPublicId}/exam-orders`
+  ) as Promise<ClinicalExamOrderListResponse>;
 }
 
 export async function uploadClinicalExamResult(
@@ -68,7 +75,9 @@ export async function validateClinicalExamResult(
 }
 
 export async function listClinicalExamTypes(): Promise<ClinicalExamTypeListResponse> {
-  return apiFetch("/api/v1/exam-types");
+  return apiFetch(
+    "/api/v1/exam-types"
+  ) as Promise<ClinicalExamTypeListResponse>;
 }
 
 export async function deleteClinicalExamResult(
@@ -80,5 +89,9 @@ export async function deleteClinicalExamResult(
 }> {
   return apiFetch(`/api/v1/exam-results/${publicId}`, {
     method: "DELETE",
-  });
+  }) as Promise<{
+    status: string;
+    exam_request_status: string;
+    exam_order_status: string;
+  }>;
 }

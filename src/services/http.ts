@@ -27,12 +27,6 @@ export class HttpError extends Error {
   }
 }
 
-/**
- * =========================
- * Refresh token mutex
- * =========================
- */
-
 let refreshPromise: Promise<string | null> | null = null;
 
 async function refreshToken(): Promise<string | null> {
@@ -63,26 +57,26 @@ async function refreshToken(): Promise<string | null> {
   return refreshPromise;
 }
 
-/**
- * =========================
- * HTTP client
- * =========================
- */
-
 export async function http<T>(
   path: string,
   options: HttpOptions = {},
   retry = true
 ): Promise<T> {
   const token = getAccessToken();
+
   const isFormData = options.body instanceof FormData;
 
-  const body: BodyInit | undefined =
-    options.body instanceof FormData
-      ? options.body
-      : options.body
-      ? JSON.stringify(options.body)
-      : undefined;
+  let body: BodyInit | undefined;
+
+  if (options.body === undefined || options.body === null) {
+    body = undefined;
+  } else if (options.body instanceof FormData) {
+    body = options.body;
+  } else if (typeof options.body === "string") {
+    body = options.body;
+  } else {
+    body = JSON.stringify(options.body);
+  }
 
   const response = await fetch(`${ENV.API_BASE_URL}${path}`, {
     method: options.method ?? "GET",
@@ -95,7 +89,6 @@ export async function http<T>(
     credentials: options.credentials ?? "include",
   });
 
-  // 401 → tenta refresh UMA VEZ, coordenado por mutex
   if (response.status === 401 && retry && !isFormData) {
     const newToken = await refreshToken();
 
@@ -108,9 +101,11 @@ export async function http<T>(
 
   if (!response.ok) {
     let errorBody: unknown = null;
+
     try {
       errorBody = await response.json();
     } catch {}
+
     throw new HttpError(response.status, errorBody);
   }
 

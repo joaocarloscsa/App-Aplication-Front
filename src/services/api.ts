@@ -6,10 +6,11 @@ type ApiOptions = RequestInit & {
   auth?: boolean;
 };
 
-export async function apiFetch(
+export async function apiFetch<T = unknown>(
   path: string,
   options: ApiOptions = {}
-) {
+): Promise<T> {
+
   const method = (options.method ?? "GET") as
     | "GET"
     | "POST"
@@ -17,11 +18,30 @@ export async function apiFetch(
     | "PATCH"
     | "DELETE";
 
+  let body = options.body;
+
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+  };
+
+  // 🔧 SERIALIZA JSON automaticamente
+  if (
+    body &&
+    typeof body === "object" &&
+    !(body instanceof FormData)
+  ) {
+    body = JSON.stringify(body);
+
+    if (!headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
+
   try {
     return await http(path, {
       method,
-      body: options.body,
-      headers: options.headers as Record<string, string> | undefined,
+      body,
+      headers,
       credentials: options.credentials,
     });
   } catch (err: any) {
