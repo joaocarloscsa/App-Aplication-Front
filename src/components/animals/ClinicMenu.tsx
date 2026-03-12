@@ -39,6 +39,11 @@ export default function ClinicMenu() {
       href: `${base}/medications`,
     },
     {
+      key: "vaccinations",
+      label: "Vacinação",
+      href: `${base}/vaccinations`,
+    },
+    {
       key: "treatments",
       label: "Tratamentos",
       href: `${base}/treatments`,

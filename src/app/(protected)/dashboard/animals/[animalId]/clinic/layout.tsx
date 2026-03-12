@@ -103,8 +103,12 @@ export default function ClinicLayout({ children }: { children: ReactNode }) {
       href: `${clinicBase}/medications`,
     },
     {
-      label: "Tratamentos",
-      href: `${clinicBase}/treatments`,
+     label: "Vacinação",
+     href: `${clinicBase}/vaccinations`,
+    },
+    {
+     label: "Tratamentos",
+     href: `${clinicBase}/treatments`,
     },
   ];
 
