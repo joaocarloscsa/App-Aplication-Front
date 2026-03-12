@@ -3,10 +3,27 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useAnimalVaccinations } from "@/hooks/useAnimalVaccinations";
+import { useAnimal } from "@/hooks/useAnimal";
 import { VaccinationCreateForm } from "@/components/animals/clinic/vaccinations/VaccinationCreateForm";
 
+function vaccinationTypeLabel(type: string) {
+  switch (type) {
+    case "initial":
+      return "Série inicial";
+    case "booster":
+      return "Reforço";
+    case "annual":
+      return "Revacinação anual";
+    default:
+      return type;
+  }
+}
+
 export default function AnimalClinicVaccinationsPage() {
+
   const { animalId } = useParams<{ animalId: string }>();
+
+  const { animal, loading: animalLoading } = useAnimal(animalId);
 
   const { vaccinations, loading, error, reload } =
     useAnimalVaccinations(animalId);
@@ -26,28 +43,38 @@ export default function AnimalClinicVaccinationsPage() {
     <div className="space-y-4">
 
       <div className="flex items-center justify-between">
+
         <h2 className="text-sm font-semibold text-zinc-900">
           Vacinação
         </h2>
 
         <button
+          type="button"
           onClick={() => setShowCreate(true)}
           className="text-sm font-medium text-zinc-900 hover:underline"
         >
           + Nova vacinação
         </button>
+
       </div>
 
-      {showCreate && (
+      {/* FORM */}
+
+      {showCreate && !animalLoading && animal && (
+
         <VaccinationCreateForm
           animalPublicId={animalId}
+          animalType={animal.type}
           onCancel={() => setShowCreate(false)}
           onCreated={async () => {
             await reload();
             setShowCreate(false);
           }}
         />
+
       )}
+
+      {/* LISTA */}
 
       {vaccinations.length === 0 && (
         <p className="text-sm text-zinc-500">
@@ -64,18 +91,22 @@ export default function AnimalClinicVaccinationsPage() {
         const isOpen = expanded === v.vaccination_public_id;
 
         return (
+
           <div
             key={v.vaccination_public_id}
             className="border rounded-lg p-4 bg-white space-y-3"
           >
 
-            {/* HEADER */}
-
             <div className="flex justify-between">
 
               <div>
+
                 <p className="font-semibold text-zinc-900">
                   {v.vaccine_name}
+                </p>
+
+                <p className="text-xs text-zinc-500">
+                  Tipo: {vaccinationTypeLabel(v.vaccination_type)}
                 </p>
 
                 <p className="text-xs text-zinc-500">
@@ -92,6 +123,7 @@ export default function AnimalClinicVaccinationsPage() {
                     {new Date(v.expiration_date).toLocaleDateString("pt-PT")}
                   </p>
                 )}
+
               </div>
 
               <div className="text-right">
@@ -101,6 +133,7 @@ export default function AnimalClinicVaccinationsPage() {
                 </span>
 
                 <button
+                  type="button"
                   onClick={() =>
                     setExpanded(
                       isOpen ? null : v.vaccination_public_id
@@ -115,11 +148,13 @@ export default function AnimalClinicVaccinationsPage() {
 
             </div>
 
-            {/* RESUMO DA ÚLTIMA DOSE */}
-
             {lastDose && (
 
               <div className="text-xs text-zinc-700 space-y-1 border-t pt-2">
+
+                {v.vaccination_type === "initial" && lastDose.dose_number && (
+                  <p>Dose: {lastDose.dose_number}</p>
+                )}
 
                 {lastDose.applied_at && (
                   <p>
@@ -129,9 +164,7 @@ export default function AnimalClinicVaccinationsPage() {
                 )}
 
                 {lastDose.actor && (
-                  <p>
-                    Aplicada por: {lastDose.actor.name}
-                  </p>
+                  <p>Aplicada por: {lastDose.actor.name}</p>
                 )}
 
                 {lastDose.next_dose_at && (
@@ -142,16 +175,12 @@ export default function AnimalClinicVaccinationsPage() {
                 )}
 
                 {lastDose.notes && (
-                  <p>
-                    Observação: {lastDose.notes}
-                  </p>
+                  <p>Observação: {lastDose.notes}</p>
                 )}
 
               </div>
 
             )}
-
-            {/* HISTÓRICO COMPLETO */}
 
             {isOpen && v.doses?.length > 0 && (
 
@@ -167,7 +196,9 @@ export default function AnimalClinicVaccinationsPage() {
                     <div className="flex justify-between">
 
                       <span className="font-medium">
-                        Dose {dose.dose_number}
+                        {v.vaccination_type === "initial" && dose.dose_number
+                          ? `Dose ${dose.dose_number}`
+                          : vaccinationTypeLabel(v.vaccination_type)}
                       </span>
 
                       <span className="text-zinc-400">
@@ -184,9 +215,7 @@ export default function AnimalClinicVaccinationsPage() {
                     )}
 
                     {dose.actor && (
-                      <p>
-                        Aplicada por: {dose.actor.name}
-                      </p>
+                      <p>Aplicada por: {dose.actor.name}</p>
                     )}
 
                     {dose.next_dose_at && (
@@ -197,9 +226,7 @@ export default function AnimalClinicVaccinationsPage() {
                     )}
 
                     {dose.notes && (
-                      <p>
-                        Observação: {dose.notes}
-                      </p>
+                      <p>Observação: {dose.notes}</p>
                     )}
 
                   </div>
@@ -211,8 +238,10 @@ export default function AnimalClinicVaccinationsPage() {
             )}
 
           </div>
+
         );
       })}
+
     </div>
   );
 }

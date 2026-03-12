@@ -2,25 +2,37 @@
 
 import { useState } from "react";
 import { createAnimalVaccination } from "@/services/animalVaccinations";
+import { useVaccineCatalog } from "@/hooks/useVaccineCatalog";
 
 type Props = {
   animalPublicId: string;
+  animalType: string;
   onCreated(): Promise<void> | void;
   onCancel(): void;
 };
 
 export function VaccinationCreateForm({
   animalPublicId,
+  animalType,
   onCreated,
   onCancel,
 }: Props) {
 
-  const [vaccineName, setVaccineName] = useState("");
+  const { vaccines } = useVaccineCatalog(animalType);
+
+  const today = new Date().toISOString().slice(0,10);
+
+  const [vaccineCode, setVaccineCode] = useState("");
+  const [vaccinationType, setVaccinationType] = useState<
+  "initial" | "booster" | "annual"
+>("initial");
+  const [doseNumber, setDoseNumber] = useState(1);
+
   const [manufacturer, setManufacturer] = useState("");
   const [batchNumber, setBatchNumber] = useState("");
-
   const [expirationDate, setExpirationDate] = useState("");
-  const [appliedAt, setAppliedAt] = useState("");
+
+  const [appliedAt, setAppliedAt] = useState(today);
   const [nextDoseAt, setNextDoseAt] = useState("");
 
   const [notes, setNotes] = useState("");
@@ -28,19 +40,10 @@ export function VaccinationCreateForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [doseNumber, setDoseNumber] = useState(1);
-
   async function submit() {
 
-    setError(null);
-
-    if (!vaccineName.trim()) {
-      setError("O nome da vacina é obrigatório.");
-      return;
-    }
-
-    if (!appliedAt) {
-      setError("A data da vacinação é obrigatória.");
+    if (!vaccineCode) {
+      setError("Selecione uma vacina.");
       return;
     }
 
@@ -49,35 +52,46 @@ export function VaccinationCreateForm({
       setLoading(true);
 
       await createAnimalVaccination(animalPublicId, {
-        vaccine_name: vaccineName,
+
+        vaccine_name: vaccineCode,
+        vaccination_type: vaccinationType,
+
+        dose_number:
+          vaccinationType === "initial"
+            ? doseNumber
+            : undefined,
+
         manufacturer: manufacturer || undefined,
         batch_number: batchNumber || undefined,
         expiration_date: expirationDate || undefined,
-        dose_number: doseNumber, 
-        applied_at: appliedAt
-          ? new Date(appliedAt).toISOString()
-          : undefined,
+
+        applied_at: new Date(appliedAt).toISOString(),
+
         next_dose_at: nextDoseAt
           ? new Date(nextDoseAt).toISOString()
           : undefined,
+
         notes: notes || undefined
+
       });
 
       await onCreated();
 
     } catch {
 
-      setError("Erro ao registrar vacinação.");
+      setError("Erro ao registrar vacinação");
 
     } finally {
 
       setLoading(false);
 
     }
+
   }
 
   return (
-    <div className="rounded-lg border bg-white p-4 space-y-4">
+
+    <div className="border rounded-lg p-4 bg-white space-y-4">
 
       <h3 className="text-sm font-semibold">
         Registrar vacinação
@@ -89,80 +103,146 @@ export function VaccinationCreateForm({
         </p>
       )}
 
-      
+      {/* VACINA */}
 
-      <div className="space-y-1">
-
-        <label className="text-xs font-medium">
-  Número da dose
-</label>
-
-<input
-  type="number"
-  min={1}
-  className="w-full border rounded px-3 py-2 text-sm"
-  value={doseNumber}
-  onChange={(e) => setDoseNumber(Number(e.target.value))}
-/>
-
-
+      <div>
 
         <label className="text-xs font-medium">
           Vacina
         </label>
 
-        <input
+        <select
+          value={vaccineCode}
+          onChange={(e) => setVaccineCode(e.target.value)}
           className="w-full border rounded px-3 py-2 text-sm"
-          value={vaccineName}
-          onChange={(e) => setVaccineName(e.target.value)}
-        />
+        >
+
+          <option value="">
+            Selecionar vacina
+          </option>
+
+          {vaccines.map((v) => (
+
+            <option key={v.code} value={v.code}>
+              {v.name}
+            </option>
+
+          ))}
+
+        </select>
 
       </div>
 
-      <div className="space-y-1">
+      {/* TIPO */}
+
+      <div>
+
+        <label className="text-xs font-medium">
+          Tipo
+        </label>
+
+        <select
+          value={vaccinationType}
+          onChange={(e) =>
+  setVaccinationType(
+    e.target.value as "initial" | "booster" | "annual"
+  )
+}
+          className="w-full border rounded px-3 py-2 text-sm"
+        >
+
+          <option value="initial">
+            Série inicial
+          </option>
+
+          <option value="booster">
+            Reforço
+          </option>
+
+          <option value="annual">
+            Revacinação anual
+          </option>
+
+        </select>
+
+      </div>
+
+      {/* DOSE */}
+
+      {vaccinationType === "initial" && (
+
+        <div>
+
+          <label className="text-xs font-medium">
+            Número da dose
+          </label>
+
+          <input
+            type="number"
+            min={1}
+            value={doseNumber}
+            onChange={(e) =>
+              setDoseNumber(Number(e.target.value))
+            }
+            className="w-full border rounded px-3 py-2 text-sm"
+          />
+
+        </div>
+
+      )}
+
+      {/* FABRICANTE */}
+
+      <div>
 
         <label className="text-xs font-medium">
           Fabricante
         </label>
 
         <input
-          className="w-full border rounded px-3 py-2 text-sm"
           value={manufacturer}
           onChange={(e) => setManufacturer(e.target.value)}
+          className="w-full border rounded px-3 py-2 text-sm"
         />
 
       </div>
 
-      <div className="space-y-1">
+      {/* LOTE */}
+
+      <div>
 
         <label className="text-xs font-medium">
           Lote
         </label>
 
         <input
-          className="w-full border rounded px-3 py-2 text-sm"
           value={batchNumber}
           onChange={(e) => setBatchNumber(e.target.value)}
+          className="w-full border rounded px-3 py-2 text-sm"
         />
 
       </div>
 
-      <div className="space-y-1">
+      {/* VALIDADE */}
+
+      <div>
 
         <label className="text-xs font-medium">
-          Validade da vacina
+          Validade
         </label>
 
         <input
           type="date"
-          className="w-full border rounded px-3 py-2 text-sm"
           value={expirationDate}
           onChange={(e) => setExpirationDate(e.target.value)}
+          className="w-full border rounded px-3 py-2 text-sm"
         />
 
       </div>
 
-      <div className="space-y-1">
+      {/* DATA */}
+
+      <div>
 
         <label className="text-xs font-medium">
           Data da vacinação
@@ -170,39 +250,43 @@ export function VaccinationCreateForm({
 
         <input
           type="date"
-          className="w-full border rounded px-3 py-2 text-sm"
           value={appliedAt}
           onChange={(e) => setAppliedAt(e.target.value)}
+          className="w-full border rounded px-3 py-2 text-sm"
         />
 
       </div>
 
-      <div className="space-y-1">
+      {/* PRÓXIMA */}
+
+      <div>
 
         <label className="text-xs font-medium">
-          Próxima vacinação
+          Próxima dose
         </label>
 
         <input
           type="date"
-          className="w-full border rounded px-3 py-2 text-sm"
           value={nextDoseAt}
           onChange={(e) => setNextDoseAt(e.target.value)}
+          className="w-full border rounded px-3 py-2 text-sm"
         />
 
       </div>
 
-      <div className="space-y-1">
+      {/* OBS */}
+
+      <div>
 
         <label className="text-xs font-medium">
-          Observações clínicas
+          Observações
         </label>
 
         <textarea
-          className="w-full border rounded px-3 py-2 text-sm"
           rows={3}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
+          className="w-full border rounded px-3 py-2 text-sm"
         />
 
       </div>
@@ -227,5 +311,6 @@ export function VaccinationCreateForm({
       </div>
 
     </div>
+
   );
 }

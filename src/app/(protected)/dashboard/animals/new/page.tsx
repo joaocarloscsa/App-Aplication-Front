@@ -199,6 +199,9 @@ export default function NewAnimalPage() {
           </div>
         </div>
 
+
+        
+
         {/* Formulário de ninhada */}
         {mode === "litter" && (
           <div className="space-y-6">

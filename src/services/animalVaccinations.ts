@@ -9,7 +9,7 @@ export type PersonRefDTO = {
 
 export type VaccinationDoseDTO = {
   public_id: string;
-  dose_number: number;
+  dose_number: number | null;
   scheduled_at?: string | null;
   applied_at?: string | null;
   next_dose_at?: string | null;
@@ -30,6 +30,7 @@ export type VaccinationEventDTO = {
 export type VaccinationDTO = {
   vaccination_public_id: string;
   vaccine_name: string;
+  vaccination_type: "initial" | "booster" | "annual";
   manufacturer?: string | null;
   batch_number?: string | null;
   expiration_date?: string | null;
@@ -41,10 +42,11 @@ export type VaccinationDTO = {
 
 export type CreateAnimalVaccinationPayload = {
   vaccine_name: string;
+  vaccination_type?: "initial" | "booster" | "annual";
+  dose_number?: number | null;
   manufacturer?: string | null;
   batch_number?: string | null;
   expiration_date?: string | null;
-  dose_number?: number;
   applied_at?: string | null;
   next_dose_at?: string | null;
   notes?: string | null;
