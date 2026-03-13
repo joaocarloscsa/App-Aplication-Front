@@ -37,10 +37,11 @@ export default function NewAnimalPage() {
   const [types, setTypes] = useState<AnimalType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
 
-  // dados compartilháveis da ninhada
+  const [singleType, setSingleType] = useState<string | undefined>();
+
   const [litterForm, setLitterForm] = useState<{
     type?: string;
-    provisional_name?: string; // ✅ NOVO
+    provisional_name?: string;
     sex?: "male" | "female" | "unknown";
     breed?: string;
     coat_color?: string;
@@ -62,7 +63,6 @@ export default function NewAnimalPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // carregar tipos de animal (select)
   useEffect(() => {
     let active = true;
 
@@ -111,6 +111,18 @@ export default function NewAnimalPage() {
     setError(null);
 
     try {
+      if (mode === "single" && !singleType) {
+        setError("Selecione o tipo do animal.");
+        setLoading(false);
+        return;
+      }
+
+      if (mode === "litter" && !litterForm.type) {
+        setError("Selecione o tipo do animal.");
+        setLoading(false);
+        return;
+      }
+
       const response =
         mode === "litter"
           ? await createAnimal({
@@ -124,16 +136,18 @@ export default function NewAnimalPage() {
             })
           : await createAnimal({
               mode: "single",
-              data: {},
+              data: {
+                basic: {
+                  type: singleType,
+                },
+              },
             });
 
-      // criação individual
       if ("public_id" in response && !("animals" in response)) {
         router.push(`/dashboard/animals/${(response as any).public_id}`);
         return;
       }
 
-      // criação de ninhada
       if ("animals" in response && Array.isArray((response as any).animals)) {
         const litterId = (response as any).public_id as string | undefined;
         const animals = (response as any).animals as Array<{ public_id: string }>;
@@ -161,12 +175,11 @@ export default function NewAnimalPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-zinc-900">Criar animal</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Nenhum campo é obrigatório. Você pode criar em branco e editar depois.
+          Apenas <b>Espécie de Animal</b> é obrigatório.
         </p>
       </div>
 
       <div className="space-y-8">
-        {/* Tipo de criação */}
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <label className="mb-3 block text-sm font-medium text-zinc-700">
             Tipo de criação
@@ -199,13 +212,27 @@ export default function NewAnimalPage() {
           </div>
         </div>
 
+        {mode === "single" && (
+          <div className="rounded-xl border border-zinc-200 bg-white p-4">
+            <label className="block text-xs text-zinc-600">Espécie *</label>
+            <select
+              value={singleType ?? ""}
+              disabled={loadingTypes}
+              onChange={(e) => setSingleType(e.target.value || undefined)}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">—</option>
+              {types.map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        
-
-        {/* Formulário de ninhada */}
         {mode === "litter" && (
           <div className="space-y-6">
-            {/* Quantidade */}
             <div className="rounded-xl border border-zinc-200 bg-white p-4">
               <label className="mb-2 block text-sm font-medium text-zinc-700">
                 Quantidade de animais na ninhada
@@ -220,27 +247,25 @@ export default function NewAnimalPage() {
               />
             </div>
 
-            {/* Dados compartilháveis */}
             <div className="rounded-xl border border-zinc-200 bg-white p-4">
               <h2 className="text-sm font-semibold text-zinc-900">
                 Dados compartilháveis (opcionais)
               </h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                 <div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-zinc-600">Nome provisório</label>
-                  <input
-                    type="text"
-                    value={litterForm.provisional_name ?? ""}
-                    onChange={(e) => setLitterField("provisional_name", e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
+                <div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-zinc-600">Nome provisório</label>
+                    <input
+                      type="text"
+                      value={litterForm.provisional_name ?? ""}
+                      onChange={(e) => setLitterField("provisional_name", e.target.value)}
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    />
+                  </div>
                 </div>
 
-                {/* Tipo (select) */}
                 <div>
-                  <label className="block text-xs text-zinc-600">Tipo</label>
+                  <label className="block text-xs text-zinc-600">Espécie *</label>
                   <select
                     value={litterForm.type ?? ""}
                     disabled={loadingTypes}
@@ -269,6 +294,7 @@ export default function NewAnimalPage() {
                     <option value="unknown">Desconhecido</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-xs text-zinc-600">Data de nascimento</label>
                   <input
@@ -321,24 +347,51 @@ export default function NewAnimalPage() {
               </div>
             </div>
 
-            {/* Pai */}
             <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-900">Pai (opcional)</h2>
 
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setFatherMode("none")} className={`rounded-lg border px-3 py-2 text-xs ${fatherMode === "none" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"}`}>
+                <button
+                  type="button"
+                  onClick={() => setFatherMode("none")}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    fatherMode === "none"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                >
                   Nenhum
                 </button>
-                <button type="button" onClick={() => setFatherMode("internal")} className={`rounded-lg border px-3 py-2 text-xs ${fatherMode === "internal" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"}`}>
+                <button
+                  type="button"
+                  onClick={() => setFatherMode("internal")}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    fatherMode === "internal"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                >
                   Interno
                 </button>
-                <button type="button" onClick={() => setFatherMode("external")} className={`rounded-lg border px-3 py-2 text-xs ${fatherMode === "external" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"}`}>
+                <button
+                  type="button"
+                  onClick={() => setFatherMode("external")}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    fatherMode === "external"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                >
                   Externo
                 </button>
               </div>
 
               {fatherMode === "internal" && (
-                <AnimalParentAutocomplete kind="father" mode="litter" onSelect={setFatherInternal} />
+                <AnimalParentAutocomplete
+                  kind="father"
+                  mode="litter"
+                  onSelect={setFatherInternal}
+                />
               )}
 
               {fatherMode === "external" && (
@@ -346,24 +399,51 @@ export default function NewAnimalPage() {
               )}
             </div>
 
-            {/* Mãe */}
             <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-900">Mãe (opcional)</h2>
 
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setMotherMode("none")} className={`rounded-lg border px-3 py-2 text-xs ${motherMode === "none" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"}`}>
+                <button
+                  type="button"
+                  onClick={() => setMotherMode("none")}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    motherMode === "none"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                >
                   Nenhum
                 </button>
-                <button type="button" onClick={() => setMotherMode("internal")} className={`rounded-lg border px-3 py-2 text-xs ${motherMode === "internal" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"}`}>
+                <button
+                  type="button"
+                  onClick={() => setMotherMode("internal")}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    motherMode === "internal"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                >
                   Interno
                 </button>
-                <button type="button" onClick={() => setMotherMode("external")} className={`rounded-lg border px-3 py-2 text-xs ${motherMode === "external" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"}`}>
+                <button
+                  type="button"
+                  onClick={() => setMotherMode("external")}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    motherMode === "external"
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                  }`}
+                >
                   Externo
                 </button>
               </div>
 
               {motherMode === "internal" && (
-                <AnimalParentAutocomplete kind="mother" mode="litter" onSelect={setMotherInternal} />
+                <AnimalParentAutocomplete
+                  kind="mother"
+                  mode="litter"
+                  onSelect={setMotherInternal}
+                />
               )}
 
               {motherMode === "external" && (
@@ -379,7 +459,6 @@ export default function NewAnimalPage() {
           </div>
         )}
 
-        {/* Ação */}
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <button
             type="button"

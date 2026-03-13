@@ -142,10 +142,10 @@ export function AnimalBasicForm({
       </div>
 
       {/* Classificação */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
+      <div className="grid gap-4 sm:grid-cols-3">
+{/*         <div>
           <label className="block text-xs text-zinc-600">
-            Tipo
+            
           </label>
           <select
             value={form.type ?? ""}
@@ -162,7 +162,7 @@ export function AnimalBasicForm({
               </option>
             ))}
           </select>
-        </div>
+        </div> */}
 
         <div>
           <label className="block text-xs text-zinc-600">
@@ -180,10 +180,7 @@ export function AnimalBasicForm({
             <option value="female">Fêmea</option>
           </select>
         </div>
-      </div>
 
-      {/* Características */}
-      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-xs text-zinc-600">
             Raça
@@ -198,7 +195,7 @@ export function AnimalBasicForm({
           />
         </div>
 
-        <div>
+                <div>
           <label className="block text-xs text-zinc-600">
             Data de nascimento
           </label>
@@ -211,6 +208,7 @@ export function AnimalBasicForm({
             className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           />
         </div>
+        
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
