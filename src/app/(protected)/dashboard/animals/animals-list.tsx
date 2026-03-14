@@ -93,7 +93,6 @@ export default function AnimalsList() {
               </div>
 
               <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <span className="truncate font-mono">{a.public_id}</span>
                 <CopyId id={a.public_id} />
               </div>
             </div>
