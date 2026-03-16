@@ -1,25 +1,84 @@
-import { useEffect, useState } from "react";
-import { fetchVaccineCatalog, VaccineCatalogItem } from "@/services/vaccineCatalog";
+"use client"
 
-export function useVaccineCatalog(animalType?: string) {
+import { useEffect, useState } from "react"
+import {
+  fetchVaccineManufacturers,
+  fetchManufacturerVaccines,
+  VaccineManufacturerDTO,
+  VaccineProductDTO
+} from "@/services/vaccineCatalog"
 
-  const [vaccines, setVaccines] = useState<VaccineCatalogItem[]>([]);
-  const [loading, setLoading] = useState(false);
+export function useVaccineCatalog(species: string) {
+
+  const [manufacturers, setManufacturers] = useState<VaccineManufacturerDTO[]>([])
+  const [vaccines, setVaccines] = useState<VaccineProductDTO[]>([])
+
+  const [loadingManufacturers, setLoadingManufacturers] = useState(false)
+  const [loadingVaccines, setLoadingVaccines] = useState(false)
+
+  async function loadManufacturers() {
+
+    try {
+
+      setLoadingManufacturers(true)
+
+      const data = await fetchVaccineManufacturers()
+
+      setManufacturers(data)
+
+    } catch (e) {
+
+      console.error("Erro ao carregar fabricantes", e)
+
+    } finally {
+
+      setLoadingManufacturers(false)
+
+    }
+
+  }
+
+  async function loadVaccines(manufacturerId: number) {
+
+    try {
+
+      setLoadingVaccines(true)
+
+      const data = await fetchManufacturerVaccines(
+        manufacturerId,
+        species
+      )
+
+      setVaccines(data)
+
+    } catch (e) {
+
+      console.error("Erro ao carregar vacinas", e)
+
+    } finally {
+
+      setLoadingVaccines(false)
+
+    }
+
+  }
 
   useEffect(() => {
 
-    if (!animalType) return;
+    loadManufacturers()
 
-    setLoading(true);
-
-    fetchVaccineCatalog(animalType)
-      .then(setVaccines)
-      .finally(() => setLoading(false));
-
-  }, [animalType]);
+  }, [])
 
   return {
+
+    manufacturers,
     vaccines,
-    loading
-  };
+
+    loadingManufacturers,
+    loadingVaccines,
+
+    loadVaccines
+
+  }
+
 }
