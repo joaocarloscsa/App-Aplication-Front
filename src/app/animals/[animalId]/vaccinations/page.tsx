@@ -5,10 +5,10 @@ import { useParams } from "next/navigation"
 import { useAnimal } from "@/hooks/useAnimal"
 import { useAnimalVaccinations } from "@/hooks/useAnimalVaccinations"
 
-import { VaccinationCreateForm } from "@/components/animals/clinic/vaccinations/VaccinationCreateForm"
-import { AnimalVaccinationHistory } from "@/components/animals/clinic/vaccinations/AnimalVaccinationHistory"
 import { ImmunityMap } from "@/components/animals/clinic/vaccinations/ImmunityMap"
 import { VaccinationRecommendations } from "@/components/animals/clinic/vaccinations/VaccinationRecommendations"
+import { VaccinationCreateForm } from "@/components/animals/clinic/vaccinations/VaccinationCreateForm"
+import { AnimalVaccinationHistory } from "@/components/animals/clinic/vaccinations/AnimalVaccinationHistory"
 
 export default function VaccinationsPage() {
 
@@ -22,12 +22,12 @@ export default function VaccinationsPage() {
 
   const {
     vaccinations,
-    reload,
-    loading: loadingVaccinations
+    loading: loadingVaccinations,
+    reload
   } = useAnimalVaccinations(animalId)
 
   if (loadingAnimal || loadingVaccinations) {
-    return <p>Carregando...</p>
+    return <p>Carregando…</p>
   }
 
   if (!animal) {
@@ -36,7 +36,7 @@ export default function VaccinationsPage() {
 
   return (
 
-    <div className="space-y-6">
+    <div className="space-y-4">
 
       <VaccinationCreateForm
         animalPublicId={animalId}

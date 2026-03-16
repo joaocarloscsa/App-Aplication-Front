@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { createAnimalVaccination } from "@/services/animalVaccinations"
 import { useVaccineCatalog } from "@/hooks/useVaccineCatalog"
 
+
 type Props = {
   animalPublicId: string
   animalType: string
