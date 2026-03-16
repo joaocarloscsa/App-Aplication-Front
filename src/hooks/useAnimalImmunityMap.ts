@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-
-const API =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+import { http } from "@/services/http"
 
 export function useAnimalImmunityMap(animalId: string) {
 
@@ -17,20 +15,12 @@ export function useAnimalImmunityMap(animalId: string) {
 
       try {
 
-        const res = await fetch(
-          `${API}/api/v1/animals/${animalId}/immunity-map`,
-          {
-            credentials: "include"
-          }
-        )
+        const result =
+          await http<any[]>(
+            `/api/v1/animals/${animalId}/immunity-map`
+          )
 
-        if (!res.ok) {
-          throw new Error(await res.text())
-        }
-
-        const json = await res.json()
-
-        setData(json)
+        setData(result)
 
       } catch (e) {
 

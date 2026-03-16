@@ -1,4 +1,7 @@
+"use client"
+
 import { useEffect, useState } from "react"
+import { http } from "@/services/http"
 
 export type Recommendation = {
   product_code: string
@@ -13,19 +16,31 @@ export function useVaccinationRecommendations(animalId: string) {
 
   const [data, setData] = useState<Recommendation[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
 
     async function load() {
 
-      const res = await fetch(
-        `/api/v1/animals/${animalId}/vaccination-recommendations`
-      )
+      try {
 
-      const json = await res.json()
+        const result =
+          await http<Recommendation[]>(
+            `/api/v1/animals/${animalId}/vaccination-recommendations`
+          )
 
-      setData(json)
-      setLoading(false)
+        setData(result)
+
+      } catch (e) {
+
+        console.error(e)
+        setError("Erro ao carregar recomendações")
+
+      } finally {
+
+        setLoading(false)
+
+      }
 
     }
 
@@ -33,6 +48,6 @@ export function useVaccinationRecommendations(animalId: string) {
 
   }, [animalId])
 
-  return { data, loading }
+  return { data, loading, error }
 
 }

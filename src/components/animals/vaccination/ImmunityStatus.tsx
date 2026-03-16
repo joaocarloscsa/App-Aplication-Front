@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { http } from "@/services/http"
 
 type Immunity = {
   disease: string
@@ -9,26 +10,47 @@ type Immunity = {
   manufacturer: string | null
 }
 
-export default function ImmunityStatus({ animalId }: { animalId: string }) {
+export default function ImmunityStatus({
+  animalId
+}: {
+  animalId: string
+}) {
 
   const [data, setData] = useState<Immunity[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
 
     async function load() {
 
-      const res = await fetch(
-        `/api/v1/animals/${animalId}/immunity-map`
-      )
+      try {
 
-      const json = await res.json()
+        const result =
+          await http<Immunity[]>(
+            `/api/v1/animals/${animalId}/immunity-map`
+          )
 
-      setData(json)
+        setData(result)
+
+      } catch (e) {
+
+        console.error(e)
+
+      } finally {
+
+        setLoading(false)
+
+      }
+
     }
 
     load()
 
   }, [animalId])
+
+  if (loading) {
+    return <p>Carregando imunidade...</p>
+  }
 
   return (
 
@@ -49,6 +71,7 @@ export default function ImmunityStatus({ animalId }: { animalId: string }) {
           status =
             "✔ protegido até " +
             date.toLocaleDateString()
+
         }
 
         return (
@@ -71,4 +94,5 @@ export default function ImmunityStatus({ animalId }: { animalId: string }) {
     </div>
 
   )
+
 }
