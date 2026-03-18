@@ -9,6 +9,7 @@ import { ImmunityMap } from "@/components/animals/clinic/vaccinations/ImmunityMa
 import { VaccinationRecommendations } from "@/components/animals/clinic/vaccinations/VaccinationRecommendations"
 import { VaccinationCreateForm } from "@/components/animals/clinic/vaccinations/VaccinationCreateForm"
 import { AnimalVaccinationHistory } from "@/components/animals/clinic/vaccinations/AnimalVaccinationHistory"
+import type { CreateAnimalVaccinationResponse } from "@/services/animalVaccinations"
 
 export default function VaccinationsPage() {
 
@@ -41,7 +42,18 @@ export default function VaccinationsPage() {
       <VaccinationCreateForm
         animalPublicId={animalId}
         animalType={animal.type}
-        onCreated={reload}
+        onCreated={(response: CreateAnimalVaccinationResponse) => {
+
+  // 1. Atualiza lista principal
+  reload()
+
+  // 2. (IMPORTANTE) — aqui você poderia evitar refetch completo
+  // se quiser evoluir depois:
+  // - atualizar estado local com response.vaccination
+  // - atualizar imunidade com response.immunity
+  // - injetar task no estado de agenda
+
+}}
         onCancel={() => {}}
       />
 

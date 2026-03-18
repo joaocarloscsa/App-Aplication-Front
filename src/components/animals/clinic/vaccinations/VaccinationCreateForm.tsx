@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { createAnimalVaccination } from "@/services/animalVaccinations"
 import { useVaccineCatalog } from "@/hooks/useVaccineCatalog"
+import { useModal } from "@/components/ui/modal/ModalProvider"
+import type { CreateAnimalVaccinationResponse } from "@/services/animalVaccinations"
 
 
 type Props = {
   animalPublicId: string
   animalType: string
-  onCreated(): Promise<void> | void
+  onCreated(response: CreateAnimalVaccinationResponse): Promise<void> | void
   onCancel(): void
 }
 
@@ -109,14 +111,14 @@ export function VaccinationCreateForm({
   const [doseNumber, setDoseNumber] = useState(1)
 
   const [appliedAt, setAppliedAt] = useState(today)
-  
-const [appliedTime, setAppliedTime] = useState(() => {
+  const { confirm } = useModal()
+  const [appliedTime, setAppliedTime] = useState(() => {
 
-  const now = new Date()
+    const now = new Date()
 
-  return `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
 
-})
+  })
 
   const [nextDoseAt, setNextDoseAt] = useState("")
   const [expirationDate, setExpirationDate] = useState("")
@@ -151,127 +153,127 @@ const [appliedTime, setAppliedTime] = useState(() => {
 
   const hasProtocols = (selectedVaccine?.protocols?.length ?? 0) > 0
 
-const maxDoseCount =
-  selectedProtocol?.dose_count ??
-  selectedProtocol?.doses?.length ??
-  1
+  const maxDoseCount =
+    selectedProtocol?.dose_count ??
+    selectedProtocol?.doses?.length ??
+    1
 
-const doseOptions = useMemo(() => {
+  const doseOptions = useMemo(() => {
 
-  if (!selectedProtocol) {
-    return MANUAL_DOSE_OPTIONS
-  }
-
-  return Array.from({ length: maxDoseCount }, (_, index) => {
-    const value = index + 1
-
-    return {
-      value,
-      label: buildDoseLabel(value, maxDoseCount)
+    if (!selectedProtocol) {
+      return MANUAL_DOSE_OPTIONS
     }
-  })
 
-}, [selectedProtocol, maxDoseCount])
+    return Array.from({ length: maxDoseCount }, (_, index) => {
+      const value = index + 1
 
-
-
-
-
-
-
-const protocolPreview = useMemo(() => {
-
-  if (!selectedProtocol) {
-    return []
-  }
-
-  const items: Array<{
-    key: string
-    title: string
-    subtitle: string
-    kind: "dose" | "booster"
-    active: boolean
-  }> = []
-
-  // NOVO MODELO COM doses[]
-  if (selectedProtocol.doses?.length) {
-
-    selectedProtocol.doses.forEach((dose) => {
-
-      const minWeeks = dose.min_age_days
-        ? Math.floor(dose.min_age_days / 7)
-        : null
-
-      const idealWeeks = dose.recommended_age_days
-        ? Math.floor(dose.recommended_age_days / 7)
-        : null
-
-      const maxWeeks = dose.max_age_days
-        ? Math.floor(dose.max_age_days / 7)
-        : null
-
-      const subtitleParts: string[] = []
-
-      if (minWeeks) subtitleParts.push(`mín: ${minWeeks} sem`)
-      if (idealWeeks) subtitleParts.push(`ideal: ${idealWeeks} sem`)
-      if (maxWeeks) subtitleParts.push(`máx: ${maxWeeks} sem`)
-
-      items.push({
-        key: `dose-${dose.dose_number}`,
-        title: `Dose ${dose.dose_number}`,
-        subtitle: subtitleParts.join(" • "),
-        kind: "dose",
-        active: dose.dose_number === doseNumber
-      })
-
+      return {
+        value,
+        label: buildDoseLabel(value, maxDoseCount)
+      }
     })
 
-  }
+  }, [selectedProtocol, maxDoseCount])
 
-  // FALLBACK para protocolos antigos
-  else {
 
-    const total = maxDoseCount ?? 1
-    const interval = selectedProtocol.interval_days ?? 0
 
-    for (let index = 1; index <= total; index++) {
 
-      let subtitle = ""
 
-      if (index > 1 && interval > 0) {
-        subtitle = `+${interval * (index - 1)} dias`
-      }
 
-      items.push({
-        key: `dose-${index}`,
-        title: `Dose ${index}`,
-        subtitle,
-        kind: "dose",
-        active: index === doseNumber
+
+  const protocolPreview = useMemo(() => {
+
+    if (!selectedProtocol) {
+      return []
+    }
+
+    const items: Array<{
+      key: string
+      title: string
+      subtitle: string
+      kind: "dose" | "booster"
+      active: boolean
+    }> = []
+
+    // NOVO MODELO COM doses[]
+    if (selectedProtocol.doses?.length) {
+
+      selectedProtocol.doses.forEach((dose) => {
+
+        const minWeeks = dose.min_age_days
+          ? Math.floor(dose.min_age_days / 7)
+          : null
+
+        const idealWeeks = dose.recommended_age_days
+          ? Math.floor(dose.recommended_age_days / 7)
+          : null
+
+        const maxWeeks = dose.max_age_days
+          ? Math.floor(dose.max_age_days / 7)
+          : null
+
+        const subtitleParts: string[] = []
+
+        if (minWeeks) subtitleParts.push(`mín: ${minWeeks} sem`)
+        if (idealWeeks) subtitleParts.push(`ideal: ${idealWeeks} sem`)
+        if (maxWeeks) subtitleParts.push(`máx: ${maxWeeks} sem`)
+
+        items.push({
+          key: `dose-${dose.dose_number}`,
+          title: `Dose ${dose.dose_number}`,
+          subtitle: subtitleParts.join(" • "),
+          kind: "dose",
+          active: dose.dose_number === doseNumber
+        })
+
       })
 
     }
 
-  }
+    // FALLBACK para protocolos antigos
+    else {
 
-  if (
-    selectedProtocol.booster_interval_days &&
-    selectedProtocol.booster_interval_days > 0
-  ) {
+      const total = maxDoseCount ?? 1
+      const interval = selectedProtocol.interval_days ?? 0
 
-items.push({
-  key: "booster",
-  title: "Reforço",
-  subtitle: `a cada ${selectedProtocol.booster_interval_days} dias`,
-  kind: "booster",
-  active: false
-})
+      for (let index = 1; index <= total; index++) {
 
-  }
+        let subtitle = ""
 
-  return items
+        if (index > 1 && interval > 0) {
+          subtitle = `+${interval * (index - 1)} dias`
+        }
 
-}, [selectedProtocol, doseNumber])
+        items.push({
+          key: `dose-${index}`,
+          title: `Dose ${index}`,
+          subtitle,
+          kind: "dose",
+          active: index === doseNumber
+        })
+
+      }
+
+    }
+
+    if (
+      selectedProtocol.booster_interval_days &&
+      selectedProtocol.booster_interval_days > 0
+    ) {
+
+      items.push({
+        key: "booster",
+        title: "Reforço",
+        subtitle: `a cada ${selectedProtocol.booster_interval_days} dias`,
+        kind: "booster",
+        active: false
+      })
+
+    }
+
+    return items
+
+  }, [selectedProtocol, doseNumber])
 
 
 
@@ -283,18 +285,18 @@ items.push({
 
 
 
-useEffect(() => {
+  useEffect(() => {
 
-  if (!selectedProtocol) {
-    setNextDoseAt("")
-    return
-  }
+    if (!selectedProtocol) {
+      setNextDoseAt("")
+      return
+    }
 
-  if (doseNumber > maxDoseCount) {
-    setDoseNumber(1)
-  }
+    if (doseNumber > maxDoseCount) {
+      setDoseNumber(1)
+    }
 
-}, [selectedProtocol])
+  }, [selectedProtocol])
 
   useEffect(() => {
     if (!selectedProtocol) {
@@ -346,74 +348,97 @@ useEffect(() => {
     await loadVaccines(id)
   }
 
-  async function submit() {
-    if (!manufacturerId) {
-      setError("Selecione o fabricante.")
-      return
-    }
-
-    if (!productCode) {
-      setError("Selecione a vacina.")
-      return
-    }
-
-/*     if (hasProtocols && !selectedProtocol) {
-      setError("Selecione o protocolo.")
-      return
-    } */
-
-    if (doseNumber < 1) {
-      setError("Selecione a dose.")
-      return
-    }
-
-    if (!selectedVaccine) {
-  setError("Vacina inválida.")
-  return
-}
-
-    try {
-      setLoading(true)
-      setError(null)
-
-const appliedDateTime = new Date(`${appliedAt}T00:00:00`)
-if (appliedTime) {
-  const [h, m] = appliedTime.split(":")
-  appliedDateTime.setHours(Number(h), Number(m), 0, 0)
-} else {
-  appliedDateTime.setHours(0, 0, 0, 0)
-}
-
-      const classificationNote = selectedProtocol
-        ? `${buildDoseLabel(doseNumber, maxDoseCount)} — ${selectedProtocol?.name ?? "Protocolo"}`
-        : getProtocolTypeLabelWithoutProtocol(doseNumber)
-
-      const mergedNotes = [classificationNote, notes.trim()]
-        .filter(Boolean)
-        .join(" | ")
-
-await createAnimalVaccination(animalPublicId, {
-  product_code: selectedVaccine.code,
-  protocol_id: selectedProtocolId,
-  dose_number: doseNumber,
-  applied_at: appliedDateTime.toISOString(),
-  batch_number: batchNumber.trim() || undefined,
-  expiration_date: expirationDate
-    ? new Date(expirationDate).toISOString()
-    : undefined,
-  next_dose_at: nextDoseAt
-    ? new Date(nextDoseAt).toISOString()
-    : undefined,
-  notes: mergedNotes || undefined
-})
-
-      await onCreated()
-    } catch {
-      setError("Erro ao registrar vacinação.")
-    } finally {
-      setLoading(false)
-    }
+async function submit() {
+  if (!manufacturerId) {
+    setError("Selecione o fabricante.")
+    return
   }
+
+  if (!productCode) {
+    setError("Selecione a vacina.")
+    return
+  }
+
+  if (doseNumber < 1) {
+    setError("Selecione a dose.")
+    return
+  }
+
+  if (!selectedVaccine) {
+    setError("Vacina inválida.")
+    return
+  }
+
+  try {
+    setLoading(true)
+    setError(null)
+
+    const appliedDateTime = new Date(`${appliedAt}T00:00:00`)
+
+    if (appliedTime) {
+      const [h, m] = appliedTime.split(":")
+      appliedDateTime.setHours(Number(h), Number(m), 0, 0)
+    } else {
+      appliedDateTime.setHours(0, 0, 0, 0)
+    }
+
+    const classificationNote = selectedProtocol
+      ? `${buildDoseLabel(doseNumber, maxDoseCount)} — ${selectedProtocol?.name ?? "Protocolo"}`
+      : getProtocolTypeLabelWithoutProtocol(doseNumber)
+
+    const mergedNotes = [classificationNote, notes.trim()]
+      .filter(Boolean)
+      .join(" | ")
+
+    const response = await createAnimalVaccination(animalPublicId, {
+      product_code: selectedVaccine.code,
+      protocol_id: selectedProtocolId,
+      dose_number: doseNumber,
+      applied_at: appliedDateTime.toISOString(),
+      expiration_date: expirationDate
+        ? new Date(expirationDate).toISOString()
+        : undefined,
+      // ⚠️ ideal: remover isso se backend for source of truth
+      next_dose_at: nextDoseAt
+        ? new Date(nextDoseAt).toISOString()
+        : undefined,
+      notes: mergedNotes || undefined
+    })
+
+    const nextDose = response?.next_dose
+    const task = response?.task
+
+    await confirm({
+      title: "Vacinação registrada",
+      message: [
+        nextDose
+          ? `📅 Próxima dose: ${new Date(nextDose.scheduled_at).toLocaleDateString("pt-PT")}`
+          : "📅 Sem próxima dose definida",
+
+        task?.created
+          ? "✅ Tarefa criada automaticamente"
+          : task?.exists
+            ? "ℹ️ Tarefa já existia"
+            : "⚠️ Nenhuma tarefa gerada",
+
+        expirationDate
+          ? `🧪 Validade da vacina: ${formatDatePt(expirationDate)}`
+          : null
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      confirmLabel: "OK",
+      hideCancel: true
+    })
+
+    await onCreated(response)
+
+  } catch {
+    setError("Erro ao registrar vacinação.")
+  } finally {
+    setLoading(false)
+  }
+}
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -597,23 +622,22 @@ await createAnimalVaccination(animalPublicId, {
                 {protocolPreview.map((item) => (
                   <div
                     key={item.key}
-                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-                      item.active
-                        ? "border-blue-200 bg-blue-50 text-blue-900"
-                        : "border-zinc-200 bg-white text-zinc-700"
-                    }`}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${item.active
+                      ? "border-blue-200 bg-blue-50 text-blue-900"
+                      : "border-zinc-200 bg-white text-zinc-700"
+                      }`}
                   >
                     <div>
                       <p className="font-medium">{item.title}</p>
                       <p className="text-xs text-zinc-500">{item.subtitle}</p>
                     </div>
 
-{item.kind === "booster" &&
- selectedProtocol?.booster_interval_days === 365 && (
-  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-    Anual
-  </span>
-)}
+                    {item.kind === "booster" &&
+                      selectedProtocol?.booster_interval_days === 365 && (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                          Anual
+                        </span>
+                      )}
                   </div>
                 ))}
               </div>

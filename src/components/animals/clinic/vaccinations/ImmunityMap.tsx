@@ -1,21 +1,29 @@
 "use client"
 
-import { useAnimalImmunityMap } from "@/hooks/useAnimalImmunityMap"
+import {
+  useAnimalImmunityMap,
+  type VaccinationImmunityItem
+} from "@/hooks/useAnimalImmunityMap"
 
 type Props = {
   animalId: string
+  overrideData?: VaccinationImmunityItem[]
 }
 
-export function ImmunityMap({ animalId }: Props) {
+export function ImmunityMap({ animalId, overrideData }: Props) {
+  const {
+    data: hookData = [],
+    loading,
+    error
+  } = useAnimalImmunityMap(animalId)
+const rawData = overrideData ?? hookData
+  const data = rawData.filter(d => d.immune_until)
 
-  const { data = [], loading, error } =
-    useAnimalImmunityMap(animalId)
-
-  if (loading) {
+  if (loading && !overrideData) {
     return <p>Carregando imunidade...</p>
   }
 
-  if (error) {
+  if (error && !overrideData) {
     return (
       <p className="text-red-600 text-sm">
         Erro ao carregar mapa de imunidade
@@ -38,48 +46,33 @@ export function ImmunityMap({ animalId }: Props) {
   }
 
   return (
-
     <div className="border rounded p-4 space-y-2">
-
       <h3 className="font-semibold">
         Mapa de Imunidade
       </h3>
 
-      {data.map((d, i) => {
-
+      {data.map((d, i: number) => {
         let status = "❌ não protegido"
 
         if (d.immune_until) {
-
           const exp = new Date(d.immune_until)
           const now = new Date()
 
           if (exp > now) {
-            status =
-              `✔ protegido até ${exp.toLocaleDateString()}`
+            status = `✔ protegido até ${exp.toLocaleDateString("pt-PT")}`
           }
-
         }
 
-        return (
-
-          <div
-            key={`${d.disease}-${i}`}
-            className="flex justify-between text-sm"
-          >
-
-            <span>{d.disease}</span>
-
-            <span>{status}</span>
-
-          </div>
-
-        )
-
+return (
+  <div
+    key={`${d.disease}-${i}`}
+    className="flex justify-between text-sm"
+  >
+    <span>{d.disease}</span>
+    <span>{status}</span>
+  </div>
+)
       })}
-
     </div>
-
   )
-
 }
